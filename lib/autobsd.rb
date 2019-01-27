@@ -1,0 +1,10 @@
+require 'bundler/setup'
+require 'optparse'
+require 'logger'
+require 'yaml'
+require 'net/ssh'
+require 'net/sftp'
+require 'shellwords'
+
+require_relative 'autobsd/builder'
+require_relative 'autobsd/modules'

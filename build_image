@@ -1,0 +1,45 @@
+#!/usr/bin/env ruby
+
+require_relative 'lib/autobsd'
+
+options = {
+  site_config: "site_config.yaml"
+}
+
+opts = OptionParser.new do |opts|
+  opts.banner = "Usage: build_image [options]"
+
+  opts.on "-s", "--site-config SITE_CONFIG", "Use specified site configuration" do |v|
+    options[:site_config] = v
+  end
+
+  opts.on "-t", "--target TARGET", "Use target with specified name" do |v|
+    options[:target] = v
+  end
+end
+
+opts.parse!
+
+
+unless options[:site_config]
+  warn "Site configuration file must be specified"
+  exit 1
+end
+
+unless options[:target]
+  warn "Target must be specified"
+  exit 1
+end
+
+root = File.expand_path("..", __FILE__)
+
+target_config = YAML.load(File.read(File.join(root, "targets", "#{options[:target]}.yaml")))
+site_config = YAML.load(File.read(File.join(root, options[:site_config])))
+
+config = target_config.merge site_config
+builder = Autobsd::Builder.new root, config
+begin
+  builder.build!
+ensure
+  builder.close
+end
