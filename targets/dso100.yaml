@@ -1,10 +1,14 @@
 freebsd_builduser: "root"
 modules:
-  - "FreeBSDSystem"
-freebsd_branch: svn://svn.freebsd.org/base/releng/12.0
-freebsd_revision: 343486
-freebsd_target: "arm"
-freebsd_target_arch: "armv7"
-freebsd_make_conf: "files/make.conf"
-freebsd_src_conf: "files/src.conf"
-freebsd_kernel_config: "ZEDBOARD"
+  - name: "HostCMakeProject"
+    project: "BSDBootImageBuilder"
+    configuration: "Release"      
+
+  - name: "FreeBSDSystem"
+    branch: svn://svn.freebsd.org/base/releng/12.0
+    revision: 343486
+    target: "arm"
+    target_arch: "armv7"
+    kernel_config: "ZEDBOARD"
+    make_conf: "files/make.conf"
+    src_conf: "files/src.conf"

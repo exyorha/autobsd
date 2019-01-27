@@ -1,6 +1,6 @@
 module Autobsd
   class Builder
-    attr_reader :ssh_session, :sftp_session, :config, :logger
+    attr_reader :ssh_session, :sftp_session, :config, :logger, :root
 
     def initialize(root, config)
       @root = root
@@ -12,7 +12,12 @@ module Autobsd
       @command_output = ""
 
       @modules = @config.fetch("modules").map do |mod|
-        Autobsd::Modules.const_get(mod).new(self)
+        config = mod
+        if config.kind_of? String
+          config = { "name" => config }
+        end
+
+        Autobsd::Modules.const_get(mod.fetch("name")).new(self, config)
       end
     end
 
@@ -104,6 +109,30 @@ module Autobsd
 
       if status[:exit_code] != 0
         raise "#{command.inspect} failed, exit status #{status[:exit_code]}"
+      end
+    end
+
+    def host_execute(*command)
+      IO.popen(command, "r", err: [ :child, :out ]) do |inf|
+        while true
+          result =
+            begin
+              inf.readpartial 8192
+            rescue EOFError
+              break
+            end
+
+          log_command_output :debug, result
+        end
+      end
+
+      $?.exitstatus
+    end
+
+    def host_execute_checked(*command)
+      result = host_execute *command
+      if result != 0
+        raise "#{command.inspect} failed, exit status #{result}"
       end
     end
 

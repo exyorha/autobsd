@@ -5,26 +5,26 @@ class Autobsd::Modules::FreeBSDSystem
   SRC_CONF = "/root/src.conf"
   MAKE_CONF = "/root/make.conf"
 
-  def initialize(builder)
+  def initialize(builder, config)
     @builder = builder
+    @config = config
   end
 
   def build!
     establish_svn
-    build_world
-
+    #build_world
   end
 
   def build_world
-    @builder.sftp_session.upload! @builder.path_to_file(@builder.config.fetch("freebsd_src_conf")), SRC_CONF
-    @builder.sftp_session.upload! @builder.path_to_file(@builder.config.fetch("freebsd_make_conf")), MAKE_CONF
+    @builder.sftp_session.upload! @builder.path_to_file(@config.fetch("src_conf")), SRC_CONF
+    @builder.sftp_session.upload! @builder.path_to_file(@config.fetch("make_conf")), MAKE_CONF
 
     @builder.logger.info "Building world"
 
-    target = @builder.config.fetch("freebsd_target")
-    target_arch = @builder.config.fetch("freebsd_target_arch")
+    target = @config.fetch("target")
+    target_arch = @config.fetch("target_arch")
     cores = @builder.config.fetch("cores")
-    kernel_config = @builder.config.fetch("freebsd_kernel_config")
+    kernel_config = @config.fetch("kernel_config")
 
     @builder.execute_checked "make",
       "-C", SRC_PATH,
@@ -75,8 +75,8 @@ class Autobsd::Modules::FreeBSDSystem
 
   def establish_svn
 
-    branch = @builder.config.fetch("freebsd_branch")
-    revision = @builder.config.fetch("freebsd_revision").to_s
+    branch = @config.fetch("branch")
+    revision = @config.fetch("revision").to_s
 
     svn_missing = false
 
