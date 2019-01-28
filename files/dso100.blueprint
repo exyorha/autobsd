@@ -1,5 +1,6 @@
 IMAGE_BASE 0x100000
 KICKSTART "%BSDKickstart%"
+INIT "%ZynqInit%"
 
 MODULE kernel "elf kernel" "%kernel%" METADATA
 	;DTB zedboard.dtb

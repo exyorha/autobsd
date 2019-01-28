@@ -22,6 +22,7 @@ modules:
     configuration: Release
     retrieve_exports:
       BSDKickstart: kickstart/kickstart
+      ZynqInit: zynq_init/zynq_init
 
   - name: BSDBootImage
     image_name: dso100.elf
