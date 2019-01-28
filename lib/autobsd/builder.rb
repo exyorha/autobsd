@@ -1,6 +1,7 @@
 module Autobsd
   class Builder
     attr_reader :ssh_session, :sftp_session, :config, :logger, :root
+    attr_accessor :exports
 
     def initialize(root, config)
       @root = root
@@ -10,6 +11,8 @@ module Autobsd
       @ssh_session = nil
       @sftp_session = nil
       @command_output = ""
+
+      @exports = {}
 
       @modules = @config.fetch("modules").map do |mod|
         config = mod
@@ -113,16 +116,22 @@ module Autobsd
     end
 
     def host_execute(*command)
+      @logger.debug Shellwords.join(command)
+
       IO.popen(command, "r", err: [ :child, :out ]) do |inf|
-        while true
+        result = false
+
+        until result.nil?
           result =
             begin
               inf.readpartial 8192
             rescue EOFError
-              break
+              nil
             end
 
-          log_command_output :debug, result
+          unless result.nil?
+            log_command_output :debug, result
+          end
         end
       end
 
@@ -146,6 +155,8 @@ module Autobsd
     end
 
     def build!
+      @logger.info "Connecting to build host"
+
       @ssh_session = Net::SSH.start @config.fetch("freebsd_buildmachine"), @config.fetch("freebsd_builduser"),
         config: false,
         non_interactive: true#,
@@ -153,6 +164,8 @@ module Autobsd
 
       @sftp_session = Net::SFTP::Session.new(@ssh_session)
       @sftp_session.connect!
+
+      @logger.info "Building"
 
       @modules.each do |mod|
         mod.build!

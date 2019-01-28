@@ -1,14 +1,28 @@
-freebsd_builduser: "root"
+freebsd_builduser: root
+cmake_system_processor: arm
+cmake_target: armv7-gnueabihf-freebsd12.0
 modules:
-  - name: "HostCMakeProject"
-    project: "BSDBootImageBuilder"
-    configuration: "Release"      
+  - name: HostCMakeProject
+    project: BSDBootImageBuilder
+    configuration: Release
+    exports:
+      BSDBootImageBuilder: BSDBootImageBuilder/Release/BSDBootImageBuilder.exe
 
-  - name: "FreeBSDSystem"
+  - name: FreeBSDSystem
     branch: svn://svn.freebsd.org/base/releng/12.0
     revision: 343486
-    target: "arm"
-    target_arch: "armv7"
-    kernel_config: "ZEDBOARD"
-    make_conf: "files/make.conf"
-    src_conf: "files/src.conf"
+    target: arm
+    target_arch: armv7
+    kernel_config: ZEDBOARD
+    make_conf: files/make.conf
+    src_conf: files/src.conf
+
+  - name: TargetCMakeProject
+    project: BSDKickstart
+    configuration: Release
+    retrieve_exports:
+      BSDKickstart: kickstart/kickstart
+
+  - name: BSDBootImage
+    image_name: dso100.elf
+    blueprint: files/dso100.blueprint

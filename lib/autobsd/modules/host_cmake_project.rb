@@ -22,5 +22,8 @@ class Autobsd::Modules::HostCMakeProject
     cores = @builder.config.fetch("cores")
     @builder.host_execute_checked "cmake", "--build", @build_dir, "-j", cores.to_s, "--config", @config.fetch("configuration")
 
+    @config.fetch("exports").each do |key, value|
+      @builder.exports[key] = File.join @build_dir, value
+    end
   end
 end

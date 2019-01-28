@@ -1,0 +1,11 @@
+IMAGE_BASE 0x100000
+KICKSTART "%BSDKickstart%"
+
+MODULE kernel "elf kernel" "%kernel%" METADATA
+	;DTB zedboard.dtb
+	KERNEND
+	HOWTO 0
+	ENVIRONMENT
+		SET vfs.root.mountfrom ufs:/dev/md0
+	END
+END

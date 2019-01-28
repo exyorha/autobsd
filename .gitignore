@@ -2,3 +2,4 @@
 /vendor/
 /site_config.yaml
 /HostBuild
+/TargetOutputs

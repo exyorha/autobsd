@@ -13,6 +13,11 @@ class Autobsd::Modules::FreeBSDSystem
   def build!
     establish_svn
     #build_world
+
+    FileUtils.mkpath File.join(@builder.root, "TargetOutputs")
+    kernel_path = File.join @builder.root, "TargetOutputs", "kernel"
+    @builder.sftp_session.download! "#{WORLD_PATH}/boot/kernel/kernel", kernel_path
+    @builder.exports["kernel"] = kernel_path
   end
 
   def build_world

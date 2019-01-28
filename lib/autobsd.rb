@@ -5,6 +5,7 @@ require 'yaml'
 require 'net/ssh'
 require 'net/sftp'
 require 'shellwords'
+require 'tempfile'
 
 require_relative 'autobsd/builder'
 require_relative 'autobsd/modules'

@@ -1,3 +1,6 @@
 [submodule "projects/BSDBootImageBuilder"]
 	path = projects/BSDBootImageBuilder
 	url = https://unwind-project.org/dso100/BSDBootImageBuilder.git
+[submodule "projects/BSDKickstart"]
+	path = projects/BSDKickstart
+	url = https://unwind-project.org/dso100/BSDKickstart.git
