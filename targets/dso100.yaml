@@ -26,6 +26,7 @@ modules:
 
   - name: VivadoSynthesis
     project: DSO100Hardware
+    root_bd: dso100
 
   - name: BSDBootImage
     image_name: dso100.elf

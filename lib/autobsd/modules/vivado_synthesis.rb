@@ -16,6 +16,7 @@ class Autobsd::Modules::VivadoSynthesis
 			@builder.host_execute_checked "#{@vivado_root}/bin/vivado",
 				"-mode", "batch",
 				"-source", "#{@project_root}/#{@project_name}.tcl",
+				"-source", "#{@project_root}/postinit.tcl",
 				"-nolog", "-nojournal",
 				"-tclargs", "--origin_dir", @project_root,
 				chdir: File.join(@builder.root, "VivadoWorkspace")
@@ -23,19 +24,28 @@ class Autobsd::Modules::VivadoSynthesis
 
 		autogen_root = File.join(File.dirname(@project), "autobsd")
 
+		root_bd = @config.fetch "root_bd"
+
 		FileUtils.mkpath autogen_root
 		File.write "#{autogen_root}/export.tcl", <<EOF
-if { [get_property NEEDS_REFRESH [get_runs synth_1]] } {
+open_bd_design [get_files #{root_bd}.bd]
+generate_target all [get_files #{root_bd}.bd]
+
+if { [get_property NEEDS_REFRESH [get_runs synth_1]] || [get_property PROGRESS [get_runs synth_1]] ne "100%" } {
 	launch_runs synth_1
 	wait_on_run synth_1
 }
 
-if { [get_property NEEDS_REFRESH [get_runs impl_1]] } {
+if { [get_property NEEDS_REFRESH [get_runs impl_1]] || [get_property PROGRESS [get_runs impl_1]] ne "100%"  } {
 	launch_runs impl_1
 	wait_on_run impl_1
 }
 
-write_hwdef -force #{autogen_root}/#{@project_name}.hdf
+write_hwdef -force #{autogen_root}/#{@project_name}.hwdef
+open_run impl_1
+set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
+write_bitstream -force #{autogen_root}/#{@project_name}.bit
+write_sysdef -force -hwdef #{autogen_root}/#{@project_name}.hwdef -bitfile  #{autogen_root}/#{@project_name}.bit -file #{autogen_root}/#{@project_name}.sysdef
 EOF
 
 		@builder.logger.info "Exporting hardware"
@@ -47,6 +57,6 @@ EOF
 			@project,
 			chdir: File.dirname(@project)
 
-		@builder.exports[@project_name] = "#{autogen_root}/#{@project_name}.hdf"
+		#@builder.exports[@project_name] = "#{autogen_root}/#{@project_name}.hdf"
 	end
 end
