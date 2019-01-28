@@ -24,6 +24,9 @@ modules:
       BSDKickstart: kickstart/kickstart
       ZynqInit: zynq_init/zynq_init
 
+  - name: VivadoSynthesis
+    project: DSO100Hardware
+
   - name: BSDBootImage
     image_name: dso100.elf
     blueprint: files/dso100.blueprint
