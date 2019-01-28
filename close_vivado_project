@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+if ARGV.empty?
+  warn "Usage: open_vivado_project <PROJECT NAME>"
+  exit 1
+end
+
+project, = ARGV
+
+File.write "projects/#{project}/export.tcl", <<EOF
+write_project_tcl -use_bd_files -force #{project}.tcl
+EOF
+
+system "C:/Xilinx/Vivado/2018.2/bin/vivado",
+	"-mode", "batch",
+	"../../VivadoWorkspace/#{project}/#{project}.xpr",
+	"-source", "export.tcl",
+	"-nolog", "-nojournal",
+	chdir: "projects/#{project}"
+
+File.delete "projects/#{project}/export.tcl"

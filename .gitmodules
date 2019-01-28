@@ -4,3 +4,6 @@
 [submodule "projects/BSDKickstart"]
 	path = projects/BSDKickstart
 	url = https://unwind-project.org/dso100/BSDKickstart.git
+[submodule "projects/DSO100Hardware"]
+	path = projects/DSO100Hardware
+	url = https://unwind-project.org/dso100/DSO100Hardware.git

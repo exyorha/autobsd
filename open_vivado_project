@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+require 'fileutils'
+
+if ARGV.empty?
+  warn "Usage: open_vivado_project <PROJECT NAME>"
+  exit 1
+end
+
+project, = ARGV
+
+FileUtils.mkpath "VivadoWorkspace"
+
+system "C:/Xilinx/Vivado/2018.2/bin/vivado",
+	"-mode", "batch",
+	"-source", "../projects/#{project}/#{project}.tcl",
+	"-nolog", "-nojournal",
+	"-tclargs", "--origin_dir", "../projects/#{project}",
+	chdir: "VivadoWorkspace"
