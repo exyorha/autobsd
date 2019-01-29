@@ -33,4 +33,9 @@ modules:
 
   - name: BSDBootImage
     image_name: dso100.elf
-    blueprint: files/dso100.blueprint
+    blueprint: projects/DSO100Hardware/dso100.blueprint
+
+  - name: ZynqBootImage
+    image_name: dso100.bin
+    config: projects/DSO100Hardware/dso100.bif
+    part: 7z020clg484
