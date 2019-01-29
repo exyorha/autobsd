@@ -7,3 +7,6 @@
 [submodule "projects/DSO100Hardware"]
 	path = projects/DSO100Hardware
 	url = https://unwind-project.org/dso100/DSO100Hardware.git
+[submodule "projects/device-tree-xlnx"]
+	path = projects/device-tree-xlnx
+	url = https://github.com/xilinx/device-tree-xlnx.git

@@ -3,7 +3,7 @@ KICKSTART "%BSDKickstart%"
 INIT "%ZynqInit%"
 
 MODULE kernel "elf kernel" "%kernel%" METADATA
-	;DTB zedboard.dtb
+	DTB %DSO100Hardware-DTB%
 	KERNEND
 	HOWTO 0
 	ENVIRONMENT
