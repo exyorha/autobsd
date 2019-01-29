@@ -28,6 +28,9 @@ modules:
     project: DSO100Hardware
     root_bd: dso100
 
+  - name: XilinxSoftwareComponents
+    project: DSO100Hardware
+
   - name: BSDBootImage
     image_name: dso100.elf
     blueprint: files/dso100.blueprint

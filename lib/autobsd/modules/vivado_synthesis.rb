@@ -37,15 +37,9 @@ if { [get_property NEEDS_REFRESH [get_runs synth_1]] || [get_property PROGRESS [
 }
 
 if { [get_property NEEDS_REFRESH [get_runs impl_1]] || [get_property PROGRESS [get_runs impl_1]] ne "100%"  } {
-	launch_runs impl_1
+	launch_runs impl_1 -to_step write_bitstream
 	wait_on_run impl_1
 }
-
-write_hwdef -force #{autogen_root}/#{@project_name}.hwdef
-open_run impl_1
-set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
-write_bitstream -force #{autogen_root}/#{@project_name}.bit
-write_sysdef -force -hwdef #{autogen_root}/#{@project_name}.hwdef -bitfile  #{autogen_root}/#{@project_name}.bit -file #{autogen_root}/#{@project_name}.sysdef
 EOF
 
 		@builder.logger.info "Exporting hardware"
@@ -57,6 +51,6 @@ EOF
 			@project,
 			chdir: File.dirname(@project)
 
-		#@builder.exports[@project_name] = "#{autogen_root}/#{@project_name}.hdf"
+		@builder.exports[@project_name] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_wrapper.sysdef"
 	end
 end
