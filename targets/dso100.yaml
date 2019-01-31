@@ -17,6 +17,10 @@ modules:
     make_conf: files/make.conf
     src_conf: files/src.conf
 
+  - name: BSDFilesystem
+    image_name: dso100.fs
+    manifest: projects/DSO100Hardware/dso100.manifest
+
   - name: TargetCMakeProject
     project: BSDKickstart
     configuration: Release
