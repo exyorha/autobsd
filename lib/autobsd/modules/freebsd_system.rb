@@ -12,7 +12,8 @@ class Autobsd::Modules::FreeBSDSystem
 
   def build!
     establish_svn
-    #build_world
+    sync_sources
+    build_world
 
     FileUtils.mkpath File.join(@builder.root, "TargetOutputs")
     kernel_path = File.join @builder.root, "TargetOutputs", "kernel"
@@ -20,7 +21,103 @@ class Autobsd::Modules::FreeBSDSystem
     @builder.exports["kernel"] = kernel_path
   end
 
+  def sync_sources
+    host_source_dir = File.join @builder.root, "projects", "FreeBSDKernelOverlay"
+    target_source_dir = SRC_PATH
+
+    files = []
+    directories = Set[]
+
+    directories.add target_source_dir
+
+    Dir["#{host_source_dir}/**/*"].each do |file|
+      path = file[(host_source_dir.size + 1)..-1]
+
+      directory = File.dirname(path)
+      unless directory == "."
+        directories.add File.join(target_source_dir, directory)
+      end
+
+      stat = File.stat file
+
+      if stat.file?
+        files.push [ path, stat ]
+      end
+    end
+
+    directories.each do |dir|
+      begin
+        @builder.sftp_session.mkdir! dir
+      rescue Net::SFTP::StatusException
+
+      end
+    end
+
+    files.each do |path, stat|
+      remote_path = File.join SRC_PATH, path
+
+      attributes =
+          begin
+            @builder.sftp_session.stat! remote_path
+          rescue Net::SFTP::StatusException => e
+            nil
+          end
+
+      same =
+        if attributes.nil?
+          false
+        else
+          same = true
+
+          if attributes.respond_to? :ctime
+            if attributes.ctime != stat.ctime.tv_sec
+              same = false
+            end
+          end
+
+          if attributes.respond_to? :ctime_nseconds
+            if attributes.ctime_nseconds != stat.ctime.tv_nsec
+              same = false
+            end
+          end
+
+          if attributes.respond_to? :mtime
+            if attributes.mtime != stat.mtime.tv_sec
+              same = false
+            end
+          end
+
+          if attributes.respond_to? :mtime_nseconds
+            if attributes.ctime_nseconds != stat.mtime.tv_nsec
+              same = false
+            end
+          end
+
+          same
+        end
+
+      unless same
+        @builder.logger.info "Copying #{path}"
+
+        @builder.sftp_session.upload!(
+          File.join(host_source_dir, path),
+          remote_path
+        )
+
+        @builder.sftp_session.setstat! remote_path,
+          atime: stat.atime.tv_sec,
+          atime_nseconds: stat.atime.tv_nsec,
+          ctime: stat.ctime.tv_sec,
+          ctime_nseconds: stat.ctime.tv_nsec,
+          mtime: stat.mtime.tv_sec,
+          mtime_nseconds: stat.mtime.tv_nsec
+      end
+    end
+  end
+
   def build_world
+    @builder.execute "kldload", "filemon"
+
     @builder.sftp_session.upload! @builder.path_to_file(@config.fetch("src_conf")), SRC_CONF
     @builder.sftp_session.upload! @builder.path_to_file(@config.fetch("make_conf")), MAKE_CONF
 

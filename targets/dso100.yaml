@@ -13,7 +13,7 @@ modules:
     revision: 343486
     target: arm
     target_arch: armv7
-    kernel_config: ZEDBOARD
+    kernel_config: DSO100
     make_conf: files/make.conf
     src_conf: files/src.conf
 
