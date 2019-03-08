@@ -14,11 +14,20 @@ class Autobsd::Modules::FreeBSDSystem
     establish_svn
     sync_sources
     build_world
+    build_modules
+
+    @builder.execute_checked "ln", "-sf", "#{OBJ_PATH}#{SRC_PATH}/tmp/usr/bin/as", "/usr/bin/#{@builder.config.fetch("cmake_target")}-as"
 
     FileUtils.mkpath File.join(@builder.root, "TargetOutputs")
     kernel_path = File.join @builder.root, "TargetOutputs", "kernel"
     @builder.sftp_session.download! "#{WORLD_PATH}/boot/kernel/kernel", kernel_path
     @builder.exports["kernel"] = kernel_path
+
+    @config.fetch("modules").each do |name|
+      module_path = File.join @builder.root, "TargetOutputs", name
+      @builder.sftp_session.download! "#{WORLD_PATH}/boot/modules/#{name}", module_path
+      @builder.exports[name] = module_path
+    end
   end
 
   def sync_sources
@@ -123,11 +132,6 @@ class Autobsd::Modules::FreeBSDSystem
 
     @builder.logger.info "Building world"
 
-    target = @config.fetch("target")
-    target_arch = @config.fetch("target_arch")
-    cores = @builder.config.fetch("cores")
-    kernel_config = @config.fetch("kernel_config")
-
     @builder.execute_checked "make",
       "-C", SRC_PATH,
       "TARGET=#{target}",
@@ -172,6 +176,59 @@ class Autobsd::Modules::FreeBSDSystem
       "DESTDIR=#{WORLD_PATH}",
       "KERNCONF=#{kernel_config}",
       "installkernel"
+  end
+
+  def target
+    @config.fetch("target")
+  end
+
+  def target_arch
+    @config.fetch("target_arch")
+  end
+
+  def cores
+    @builder.config.fetch("cores")
+  end
+
+  def kernel_config
+    @config.fetch("kernel_config")
+  end
+
+  def build_modules
+    build_script = StringIO.new
+
+    build_script.puts "#!/bin/sh"
+    build_script.puts "set -e"
+
+    @config.fetch("module_projects").each do |project|
+      target_directory = "/root/projects/#{project}"
+      @builder.sync_directory_twoway File.join(@builder.root, "projects", project), target_directory
+
+      build_script.puts "echo Starting build for #{project}"
+      build_script.puts "make -C #{target_directory} all install -j#{cores}"
+    end
+
+    build_script.rewind
+
+    @builder.sftp_session.upload!(
+      build_script,
+      "/root/buildmodules.sh"
+    )
+
+    @builder.sftp_session.setstat! "/root/buildmodules.sh", permissions: 0755
+
+    @builder.execute_checked "make",
+      "-C", SRC_PATH,
+      "TARGET=#{target}",
+      "TARGET_ARCH=#{target_arch}",
+      "MAKEOBJDIRPREFIX=#{OBJ_PATH}",
+      "__MAKE_CONF=#{MAKE_CONF}",
+      "SRCCONF=#{SRC_CONF}",
+      "WITH_META_MODE=yes",
+      "DESTDIR=#{WORLD_PATH}",
+      "KERNCONF=#{kernel_config}",
+      "BUILDENV_SHELL=/root/buildmodules.sh",
+      "buildenv"
 
   end
 

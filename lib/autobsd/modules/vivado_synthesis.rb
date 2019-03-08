@@ -9,7 +9,6 @@ class Autobsd::Modules::VivadoSynthesis
 	end
 
 	def build!
-
 		unless File.exist? @project
 			@builder.logger.info "Recreating vivado project"
 			FileUtils.mkpath File.dirname @project

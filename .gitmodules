@@ -13,3 +13,9 @@
 [submodule "projects/FreeBSDKernelOverlay"]
 	path = projects/FreeBSDKernelOverlay
 	url = https://unwind-project.org/dso100/FreeBSDKernelOverlay.git
+[submodule "projects/DSOSystem"]
+	path = projects/DSOSystem
+	url = https://unwind-project.org/dso100/DSOSystem.git
+[submodule "projects/DSO100Drivers"]
+	path = projects/DSO100Drivers
+	url = https://unwind-project.org/dso100/DSO100Drivers.git
