@@ -28,10 +28,19 @@ EOF
 
     @builder.sftp_session.upload!(StringIO.new(toolchain), "/root/toolchain.cmake")
 
-    @builder.execute_checked "cmake", "-S", @target_source_dir, "-B", @target_build_dir,
-      "-DCMAKE_TOOLCHAIN_FILE=/root/toolchain.cmake"
+    extra = []
 
-    cores = @builder.config.fetch("cores")
+    if has_host_tools
+      @builder.execute_checked "cmake", "-S", File.join(@target_source_dir, "HostTools"), "-B", File.join(@target_build_dir, "NativeHostTools")
+      @builder.execute_checked "cmake", "--build", File.join(@target_build_dir, "NativeHostTools"), "-j", cores.to_s, "--config", @config.fetch("configuration")
+
+      extra << "-DIMPORT_HOST_TOOLS=#{File.join(@target_build_dir, "NativeHostTools", "ImportHostTools.cmake")}"
+    end
+
+    @builder.execute_checked "cmake", "-S", @target_source_dir, "-B", @target_build_dir,
+      "-DCMAKE_TOOLCHAIN_FILE=/root/toolchain.cmake",
+      *extra
+
     @builder.execute_checked "cmake", "--build", @target_build_dir, "-j", cores.to_s, "--config", @config.fetch("configuration")
 
     @config.fetch("retrieve_exports", {}).each do |name, path|
@@ -40,6 +49,14 @@ EOF
       @builder.sftp_session.download! File.join(@target_build_dir, path), local_path
       @builder.exports[name] = local_path
     end
+  end
+
+  def cores
+    @builder.config.fetch("cores")
+  end
+
+  def has_host_tools
+    @config.fetch("has_host_tools", false)
   end
 
   def sync_sources

@@ -20,11 +20,12 @@ modules:
       - DSO100Drivers
     modules:
       - dso100fb.ko
-      
+
   - name: TargetCMakeProject
     project: DSOSystem
     configuration: Release
     retrieve_exports: []
+    has_host_tools: true
 
   - name: BSDFilesystem
     image_name: dso100.fs
