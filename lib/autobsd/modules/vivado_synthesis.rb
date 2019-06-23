@@ -32,11 +32,13 @@ open_bd_design [get_files #{root_bd}.bd]
 generate_target all [get_files #{root_bd}.bd]
 
 if { [get_property NEEDS_REFRESH [get_runs synth_1]] || [get_property PROGRESS [get_runs synth_1]] ne "100%" } {
+	reset_run synth_1
 	launch_runs synth_1
 	wait_on_run synth_1
 }
 
 if { [get_property NEEDS_REFRESH [get_runs impl_1]] || [get_property PROGRESS [get_runs impl_1]] ne "100%"  } {
+	reset_run impl_1
 	launch_runs impl_1 -to_step write_bitstream
 	wait_on_run impl_1
 }
@@ -44,13 +46,15 @@ EOF
 
 		@builder.logger.info "Building documentation"
 
-		template = nil
+		html_template = nil
+		header_template = nil
 
-		Dir[File.join(@project_root, "rtl", "*.v")].each do |filename|
+		Dir[File.join(@project_root, "rtl", "*_interface.v")].each do |filename|
 			content = File.read filename, encoding: 'UTF-8'
 
 		  parser = OrigenVerilog::Preprocessor::GrammarParser.new
 		  tree = parser.parse content
+
 
 		  unless tree
 		    raise "parse error in #{filename}:#{parser.failure_line}.#{parser.failure_column}: #{parser.failure_reason}"
@@ -66,22 +70,38 @@ EOF
 
 			  xml = processor.to_xml
 
-			  File.open(File.join(@documentation_root, "#{processor.interface_name}.xml"), "w") do |outf|
+				xml_filename = "#{processor.interface_name}.xml"
+				xml_file = File.join(@documentation_root, xml_filename)
+				h_filename = "#{processor.interface_name}.h"
+				h_file = File.join(@documentation_root, h_filename)
+			  File.open(xml_filename, "w") do |outf|
 			    xml.write outf
 			  end
 
-				if template.nil?
-					template = Nokogiri::XSLT(File.read(File.join(@documentation_root, "../regdoc_style.xsl")))
+				if html_template.nil?
+					html_template = Nokogiri::XSLT(File.read(File.join(@documentation_root, "../regdoc_style.xsl")))
+				end
+
+				if header_template.nil?
+					header_template = Nokogiri::XSLT(File.read(File.join(@documentation_root, "../interface_header.xsl")))
 				end
 
 				document = Nokogiri::XML(xml.to_s)
 
-				transformed_document = template.transform(document)
+				transformed_document = html_template.apply_to(document)
 
 				File.open(File.join(@documentation_root, "#{processor.interface_name}.html"), "w") do |outf|
 					outf.write transformed_document
 				end
+
+				transformed_document = header_template.apply_to document
+				File.open(h_file, "w") do |outf|
+					outf.write transformed_document
+				end
 			end
+
+			@builder.exports[xml_filename] = xml_file
+			@builder.exports[h_filename] = h_file
 		end
 
 		@builder.logger.info "Exporting hardware"

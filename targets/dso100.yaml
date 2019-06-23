@@ -14,14 +14,16 @@ modules:
 
   - name: FreeBSDSystem
     branch: svn://svn.freebsd.org/base/releng/12.0
-    revision: 343792
+    revision: 349200
     target: arm
     target_arch: armv7
     kernel_config: DSO100
     make_conf: files/make.conf
     src_conf: files/src.conf
     module_projects:
-      - DSO100Drivers
+      - name: DSO100Drivers
+        interface_headers:
+          - DSO100FB
     modules:
       - dso100fb.ko
 

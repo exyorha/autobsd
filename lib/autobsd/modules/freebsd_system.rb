@@ -14,7 +14,7 @@ class Autobsd::Modules::FreeBSDSystem
     #establish_svn
     #sync_sources
     #build_world
-    #build_modules
+    build_modules
 
     @builder.execute_checked "ln", "-sf", "#{OBJ_PATH}#{SRC_PATH}/tmp/usr/bin/as", "/usr/bin/#{@builder.config.fetch("cmake_target")}-as"
 
@@ -23,10 +23,10 @@ class Autobsd::Modules::FreeBSDSystem
     @builder.sftp_session.download! "#{WORLD_PATH}/boot/kernel/kernel", kernel_path
     @builder.exports["kernel"] = kernel_path
 
-    @config.fetch("modules").each do |name|
-      module_path = File.join @builder.root, "TargetOutputs", name
-      @builder.sftp_session.download! "#{WORLD_PATH}/boot/modules/#{name}", module_path
-      @builder.exports[name] = module_path
+    @config.fetch("modules").each do |mod|
+      module_path = File.join @builder.root, "TargetOutputs", mod
+      @builder.sftp_session.download! "#{WORLD_PATH}/boot/modules/#{mod}", module_path
+      @builder.exports[mod] = module_path
     end
   end
 
@@ -200,12 +200,21 @@ class Autobsd::Modules::FreeBSDSystem
     build_script.puts "#!/bin/sh"
     build_script.puts "set -e"
 
-    @config.fetch("module_projects").each do |project|
+    @config.fetch("module_projects").each do |mod|
+      project = mod["name"]
       target_directory = "/root/projects/#{project}"
       @builder.sync_directory_twoway File.join(@builder.root, "projects", project), target_directory
 
+      mod.fetch("interface_headers", []).each do |header|
+        @builder.sftp_session.upload!(
+          @builder.exports.fetch(header + ".h"),
+          "#{target_directory}/#{header}.h"
+        )
+      end
+
       build_script.puts "echo Starting build for #{project}"
-      build_script.puts "make -C #{target_directory} all install -j#{cores}"
+      build_script.puts "make -C #{target_directory} -j#{cores}"
+      build_script.puts "make -C #{target_directory} install"
     end
 
     build_script.rewind

@@ -68,7 +68,7 @@ class RegdocProcessor
 
     doc = REXML::Document.new
     doc.add REXML::XMLDecl.new
-    
+
     regdoc = REXML::Element.new 'regdoc'
     doc.add regdoc
 
@@ -121,7 +121,7 @@ class RegdocProcessor
   end
 
   def on_source(node)
-    process_all node
+    process_all node.children
   end
 
   def on_comment(comment)
@@ -188,5 +188,11 @@ class RegdocProcessor
         recipient << line
       end
     end
+  end
+
+  def on_ifndef(node)
+    name, *children = node.children
+
+    process_all children
   end
 end
