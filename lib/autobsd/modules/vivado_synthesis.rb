@@ -6,6 +6,7 @@ class Autobsd::Modules::VivadoSynthesis
 		@project_root = File.join @builder.root, "projects", @project_name
 		@vivado_root = @builder.config.fetch "vivado"
 		@project = File.join @builder.root, "VivadoWorkspace", @project_name, "#{@project_name}.xpr"
+		@documentation_root = File.join @builder.root, "documentation", @project_name
 	end
 
 	def build!
@@ -40,6 +41,48 @@ if { [get_property NEEDS_REFRESH [get_runs impl_1]] || [get_property PROGRESS [g
 	wait_on_run impl_1
 }
 EOF
+
+		@builder.logger.info "Building documentation"
+
+		template = nil
+
+		Dir[File.join(@project_root, "rtl", "*.v")].each do |filename|
+			content = File.read filename, encoding: 'UTF-8'
+
+		  parser = OrigenVerilog::Preprocessor::GrammarParser.new
+		  tree = parser.parse content
+
+		  unless tree
+		    raise "parse error in #{filename}:#{parser.failure_line}.#{parser.failure_column}: #{parser.failure_reason}"
+		  end
+
+		  ast = tree.to_ast
+
+		  processor = RegdocProcessor.new
+		  processor.process ast
+
+			if processor.has_any_documentation?
+				FileUtils.mkpath @documentation_root
+
+			  xml = processor.to_xml
+
+			  File.open(File.join(@documentation_root, "#{processor.interface_name}.xml"), "w") do |outf|
+			    xml.write outf
+			  end
+
+				if template.nil?
+					template = Nokogiri::XSLT(File.read(File.join(@documentation_root, "../regdoc_style.xsl")))
+				end
+
+				document = Nokogiri::XML(xml.to_s)
+
+				transformed_document = template.transform(document)
+
+				File.open(File.join(@documentation_root, "#{processor.interface_name}.html"), "w") do |outf|
+					outf.write transformed_document
+				end
+			end
+		end
 
 		@builder.logger.info "Exporting hardware"
 

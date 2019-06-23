@@ -8,6 +8,10 @@ modules:
     exports:
       BSDBootImageBuilder: BSDBootImageBuilder/Release/BSDBootImageBuilder.exe
 
+  - name: VivadoSynthesis
+    project: DSO100Hardware
+    root_bd: dso100
+
   - name: FreeBSDSystem
     branch: svn://svn.freebsd.org/base/releng/12.0
     revision: 343792
@@ -21,11 +25,11 @@ modules:
     modules:
       - dso100fb.ko
 
-  - name: TargetCMakeProject
-    project: DSOSystem
-    configuration: Release
-    retrieve_exports: []
-    has_host_tools: true
+  #- name: TargetCMakeProject
+  #  project: DSOSystem
+  #  configuration: Release
+  #  retrieve_exports: []
+  #  has_host_tools: true
 
   - name: BSDFilesystem
     image_name: dso100.fs
@@ -37,10 +41,6 @@ modules:
     retrieve_exports:
       BSDKickstart: kickstart/kickstart
       ZynqInit: zynq_init/zynq_init
-
-  - name: VivadoSynthesis
-    project: DSO100Hardware
-    root_bd: dso100
 
   - name: XilinxSoftwareComponents
     project: DSO100Hardware

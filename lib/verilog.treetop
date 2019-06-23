@@ -1,0 +1,3736 @@
+module OrigenVerilog
+  module Verilog
+    grammar Grammar
+      # Comments are from the formal syntax definition in 1364-2005
+
+      rule verilog_source
+        verilog_source_items+ {
+          def to_ast
+            n :verilog_source, *elements_to_ast
+          end
+        }
+      end
+
+      rule verilog_library
+        verilog_library_items+ {
+          def to_ast
+            n :verilog_library, *elements_to_ast
+          end
+        }
+      end
+
+      # A.1.1 Library source text
+
+      # library_text ::= { library_description }
+      # library_description ::=
+      #   library_declaration
+      #   | include_statement
+      #   | config_declaration
+      rule verilog_library_items
+        S / N / block_comment / one_line_comment / compiler_directive / library_declaration /
+        include_statement / config_declaration
+      end
+
+      # library_declaration ::=
+      #   library library_identifier file_path_spec [ { , file_path_spec } ]
+      #   [ -incdir file_path_spec { , file_path_spec } ] ;
+      rule library_declaration
+        "library" S library_identifier S file_path_spec (s "," s file_path_spec)* s
+        ("-incdir" S file_path_spec (s "," s file_path_spec)*)? s ";" {
+          def to_ast
+            n :library_declaration, *elements_to_ast
+          end
+        }
+      end
+      # include_statement ::= include file_path_spec ;
+      rule include_statement
+        "include" S file_path_spec s ";" {
+          def to_ast
+            n :include_statement, *elements_to_ast
+          end
+        }
+      end
+      
+      # A.1.2 Verilog source text
+
+      # source_text ::= { description }
+      # description ::=
+      #   module_declaration
+      #   | udp_declaration
+      #   | config_declaration
+      rule verilog_source_items
+        S / N / block_comment / one_line_comment / compiler_directive / module_declaration /
+        udp_declaration / config_declaration
+      end
+
+      # module_declaration ::=
+      #   { attribute_instance } module_keyword module_identifier [ module_parameter_port_list ]
+      #     list_of_ports ; { module_item }
+      #     endmodule
+      #   | { attribute_instance } module_keyword module_identifier [ module_parameter_port_list ]
+      #     [ list_of_port_declarations ] ; { non_port_module_item }
+      #     endmodule
+      rule module_declaration
+        (((s attribute_instance)* s module_keyword S module_identifier s module_parameter_port_list? s
+          list_of_ports s ";" (s module_item)* s "endmodule") /
+        ((s attribute_instance)* s module_keyword S module_identifier s module_parameter_port_list? s
+          list_of_port_declarations? s ";" (s non_port_module_item)* s "endmodule")) {
+          def to_ast
+            n :module_declaration, *elements_to_ast
+          end
+        }
+      end
+      # module_keyword ::= module | macromodule
+      rule module_keyword
+        "module" / "macromodule"
+      end
+
+      #################################################################
+      # Compiler directives
+      #################################################################
+      rule compiler_directive
+        (error / timescale_compiler_directive
+        
+        ) 1..1 {
+          def to_ast
+            n :compiler_directive, *elements_to_ast
+          end
+        }
+      end
+
+      rule error
+        "`error" S message:string {
+          def to_ast
+            n :error, message.to_ast
+          end
+        }
+      end
+
+      # timescale_compiler_directive ::=
+      # `timescale time_unit / time_precision
+      rule timescale_compiler_directive
+        "`timescale" S time_number s "/" s time_number {
+          def to_ast
+            n :timescale_compiler_directive, *elements_to_ast
+          end
+        } 
+
+      end
+
+      rule time_number
+        (value:("100" / "10" / "1") s unit:("s" / "ms" / "us" / "ns" / "ps" / "fs")) {
+          def to_ast
+            n :time_number, value.text_value.to_i, unit.text_value
+          end
+        }
+      end
+
+      # A.1.3 Module parameters and ports
+      # 
+      # module_parameter_port_list ::= # ( parameter_declaration { , parameter_declaration } )
+      rule module_parameter_port_list
+        "#(" s parameter_declaration (s ',' s parameter_declaration)* s ")" {
+          def to_ast
+            n :module_parameter_port_list, *elements_to_ast
+          end
+        }
+      end
+      # list_of_ports ::= ( port { , port } )
+      rule list_of_ports
+        "(" s port (s ',' s port)* s ")" {
+          def to_ast
+            n :list_of_ports, *elements_to_ast
+          end
+        }
+      end
+      # list_of_port_declarations ::=
+      #   ( port_declaration { , port_declaration } )
+      #   | ( )
+      rule list_of_port_declarations
+        "(" s port_declaration? (s ',' s port_declaration)* s ")"
+      end
+      # port ::=
+      #   [ port_expression ]
+      #   | . port_identifier ( [ port_expression ] )
+      rule port
+        (port_expression / ("\." port_identifier s "(" s port_expression? s ")")) {
+          def to_ast
+            n :port, *elements_to_ast
+          end
+        }
+      end
+      # port_expression ::=
+      #   port_reference
+      #   | { port_reference { , port_reference } }
+      rule port_expression
+        (port_reference / 
+        (port_reference (s ',' s port_reference s)*)) {
+          def to_ast
+            n :port_expression, *elements_to_ast
+          end
+        }
+      end
+      # port_reference ::=
+      #   port_identifier [ [ constant_range_expression ] ]
+      rule port_reference
+        port_identifier s ("[" s constant_range_expression s "]")? {
+          def to_ast
+            n :port_reference, *elements_to_ast
+          end
+        }
+      end
+      # port_declaration ::=
+      #   {attribute_instance} inout_declaration
+      #   | {attribute_instance} input_declaration
+      #   | {attribute_instance} output_declaration
+      rule port_declaration
+        (((s attribute_instance)* s inout_declaration) /
+        ((s attribute_instance)* s input_declaration) / 
+        ((s attribute_instance)* s output_declaration))
+      end
+
+      # A.1.4 Module items
+
+      # module_item ::=
+      #   port_declaration ;
+      #   | non_port_module_item
+      rule module_item
+        (port_declaration s ";") / non_port_module_item
+      end
+      # module_or_generate_item ::=
+      #   { attribute_instance } module_or_generate_item_declaration
+      #   | { attribute_instance } local_parameter_declaration ;
+      #   | { attribute_instance } parameter_override
+      #   | { attribute_instance } continuous_assign
+      #   | { attribute_instance } gate_instantiation
+      #   | { attribute_instance } udp_instantiation
+      #   | { attribute_instance } module_instantiation
+      #   | { attribute_instance } initial_construct
+      #   | { attribute_instance } always_construct
+      #   | { attribute_instance } loop_generate_construct
+      #   | { attribute_instance } conditional_generate_construct
+      rule module_or_generate_item
+        (((s attribute_instance s)* s module_or_generate_item_declaration) / 
+         ((s attribute_instance s)* s local_parameter_declaration s ";") /
+         ((s attribute_instance s)* s parameter_override) /
+         ((s attribute_instance s)* s continuous_assign) /
+         ((s attribute_instance s)* s gate_instantiation) /
+         ((s attribute_instance s)* s udp_instantiation) /
+         ((s attribute_instance s)* s module_instantiation) /
+         ((s attribute_instance s)* s initial_construct) /
+         ((s attribute_instance s)* s always_construct) /
+         ((s attribute_instance s)* s loop_generate_construct) /
+         ((s attribute_instance s)* s conditional_generate_construct)) {
+          def to_ast
+            n :module_or_generate_item, *elements_to_ast
+          end
+        }
+      end
+      # module_or_generate_item_declaration ::=
+      #   net_declaration
+      #   | reg_declaration
+      #   | integer_declaration
+      #   | real_declaration
+      #   | time_declaration
+      #   | realtime_declaration
+      #   | event_declaration
+      #   | genvar_declaration
+      #   | task_declaration
+      #   | function_declaration
+      rule module_or_generate_item_declaration
+        net_declaration /
+        reg_declaration /
+        integer_declaration /
+        real_declaration /
+        time_declaration /
+        realtime_declaration /
+        event_declaration /
+        genvar_declaration /
+        task_declaration /
+        function_declaration
+      end
+      # non_port_module_item ::=
+      #   module_or_generate_item
+      #   | generate_region
+      #   | specify_block
+      #   | { attribute_instance } parameter_declaration ;
+      #   | { attribute_instance } specparam_declaration
+      rule non_port_module_item
+        (module_or_generate_item /
+         generate_region /
+         specify_block /
+         ((s attribute_instance)* s parameter_declaration s ";") /
+         ((s attribute_instance)* s specparam_declaration)) {
+          def to_ast
+            n :non_port_module_item, *elements_to_ast
+          end
+         }
+      end
+      # parameter_override ::= defparam list_of_defparam_assignments ;
+      rule parameter_override
+        "defparam" s list_of_defparam_assignments s ";" {
+          def to_ast
+            n :parameter_override, *elements_to_ast
+          end
+        }
+      end
+
+      # A.1.5 Configuration source text
+
+      # config_declaration ::=
+      #   config config_identifier ;
+      #   design_statement
+      #   {config_rule_statement}
+      #   endconfig
+      rule config_declaration
+        "config" config_identifier s ";" s design_statement (s config_rule_statement)* s "endconfig" {
+          def to_ast
+            n :config_declaration, *elements_to_ast
+          end
+        }
+      end
+      # design_statement ::= design { [library_identifier.]cell_identifier } ;
+      rule design_statement
+        "design" (s (library_identifier ".")? cell_identifier)* s ";" {
+          def to_ast
+            n :design_statement, *elements_to_ast
+          end
+        }
+      end
+      # config_rule_statement ::=
+      #   default_clause liblist_clause ;
+      #   | inst_clause liblist_clause ;
+      #   | inst_clause use_clause ;
+      #   | cell_clause liblist_clause ;
+      #   | cell_clause use_clause ;
+      rule config_rule_statement
+        ((default_clause S liblist_clause s ";") /
+         (inst_clause S liblist_clause s ";") /
+         (inst_clause S use_clause s ";") /
+         (cell_clause S liblist_clause s ";") /
+         (cell_clause S use_clause s ";")) {
+          def to_ast
+            n :config_rule_statement, *elements_to_ast
+          end
+        }
+      end
+      # default_clause ::= default
+      rule default_clause
+        default {
+          def to_ast
+            n :default_clause, *elements_to_ast
+          end
+        }
+      end
+      # inst_clause ::= instance inst_name
+      rule inst_clause
+        "instance" S inst_name {
+          def to_ast
+            n :inst_clause, *elements_to_ast
+          end
+        }
+      end
+      # inst_name ::= topmodule_identifier{.instance_identifier}
+      rule inst_name
+        topmodule_identifier ("." instance_identifier)* {
+          def to_ast
+            n :inst_name, *elements_to_ast
+          end
+        }
+      end
+      # cell_clause ::= cell [ library_identifier.]cell_identifier
+      rule cell_clause
+        "cell" S (library_identifier ".")? cell_identifier {
+          def to_ast
+            n :cell_clause, *elements_to_ast
+          end
+        }
+      end
+      # liblist_clause ::= liblist { library_identifier }
+      rule liblist_clause
+        "liblist" (s library_identifier)* {
+          def to_ast
+            n :liblist_clause, *elements_to_ast
+          end
+        }
+      end
+      # use_clause ::= use [library_identifier.]cell_identifier[:config]
+      rule use_clause
+        "use" S (library_identifier ".")? cell_identifier ":config"? {
+          def to_ast
+            n :use_clause, *elements_to_ast
+          end
+        }
+      end
+
+      # A.2 Declarations
+
+      # A.2.1 Declaration types
+
+      # A.2.1.1 Module parameter declarations
+
+      # local_parameter_declaration ::=
+      #   localparam [ signed ] [ range ] list_of_param_assignments
+      #   | localparam parameter_type list_of_param_assignments
+      rule local_parameter_declaration
+        (("localparam" s signed? s range? s list_of_param_assignments) /
+        ("localparam" s parameter_type s list_of_param_assignments)) {
+          def to_ast
+            n :local_parameter_declaration, *elements_to_ast
+          end
+        }
+      end
+      # parameter_declaration ::=
+      #   parameter [ signed ] [ range ] list_of_param_assignments
+      #   | parameter parameter_type list_of_param_assignments
+      rule parameter_declaration
+        (("parameter" s parameter_type s list_of_param_assignments) /
+         ("parameter" s signed? s range? s list_of_param_assignments)) {
+          def to_ast
+            n :parameter_declaration, *elements_to_ast
+          end
+        }
+      end
+      # specparam_declaration ::= specparam [ range ] list_of_specparam_assignments ;
+      rule specparam_declaration
+        "specparam" s range? s list_of_specparam_assignments s ";" {
+          def to_ast
+            n :specparam_declaration, *elements_to_ast
+          end
+        }
+      end
+      # parameter_type ::=
+      #   integer | real | realtime | time
+      rule parameter_type
+        ("integer" / "real" / "realtime" / "time") {
+          def to_ast
+            n :parameter_type, text_value
+          end
+        }
+      end
+
+      rule signed
+        "signed" {
+          def to_ast
+            n(:signed)
+          end
+        }
+      end
+
+      rule reg
+        "reg" {
+          def to_ast
+            n(:reg)
+          end
+        }
+      end
+
+      rule time
+        "time" {
+          def to_ast
+            n(:time)
+          end
+        }
+      end
+       
+      rule integer
+        "integer" {
+          def to_ast
+            n(:integer)
+          end
+        }
+      end
+       
+      rule real
+        "real" {
+          def to_ast
+            n(:real)
+          end
+        }
+      end
+       
+      rule realtime
+        "realtime" {
+          def to_ast
+            n(:realtime)
+          end
+        }
+      end
+
+      # A.2.1.2 Port declarations
+
+      # inout_declaration ::= inout [ net_type ] [ signed ] [ range ]
+      #   list_of_port_identifiers
+      rule inout_declaration
+        "inout" s net_type? s signed? s range? s list_of_port_identifiers {
+          def to_ast
+            n :inout_declaration, *elements_to_ast
+          end
+        }
+      end
+      # input_declaration ::= input [ net_type ] [ signed ] [ range ]
+      #   list_of_port_identifiers
+      rule input_declaration
+        "input" s net_type? s signed? s range? s list_of_port_identifiers {
+          def to_ast
+            n :input_declaration, *elements_to_ast
+          end
+        }
+      end
+      # output_declaration ::=
+      #   output [ net_type ] [ signed ] [ range ]
+      #     list_of_port_identifiers
+      #   | output reg [ signed ] [ range ]
+      #     list_of_variable_port_identifiers
+      #   | output output_variable_type
+      #     list_of_variable_port_identifiers
+      rule output_declaration
+        (("output reg" s signed? s range? s list_of_variable_port_identifiers) /
+         ("output" s net_type? s signed? s range? s list_of_port_identifiers) /
+         ("output" s output_variable_type s list_of_variable_port_identifiers))
+        {
+          def to_ast
+            n :output_declaration, *elements_to_ast
+          end
+        }
+      end
+
+      # A.2.1.3 Type declarations
+
+      # event_declaration ::= event list_of_event_identifiers ;
+      rule event_declaration
+        "event" S list_of_event_identifiers s ";" {
+          def to_ast
+            n :event_declaration, *elements_to_ast
+          end
+        }
+      end
+      # integer_declaration ::= integer list_of_variable_identifiers ;
+      rule integer_declaration
+        "integer" S list_of_variable_identifiers s ";" {
+          def to_ast
+            n :integer_declaration, *elements_to_ast
+          end
+        }
+      end
+      # net_declaration ::=
+      #   net_type [ signed ]
+      #     [ delay3 ] list_of_net_identifiers ;
+      #   | net_type [ drive_strength ] [ signed ]
+      #     [ delay3 ] list_of_net_decl_assignments ;
+      #   | net_type [ vectored | scalared ] [ signed ]
+      #     range [ delay3 ] list_of_net_identifiers ;
+      #   | net_type [ drive_strength ] [ vectored | scalared ] [ signed ]
+      #     range [ delay3 ] list_of_net_decl_assignments ;
+      #   | trireg [ charge_strength ] [ signed ]
+      #     [ delay3 ] list_of_net_identifiers ;
+      #   | trireg [ drive_strength ] [ signed ]
+      #     [ delay3 ] list_of_net_decl_assignments ;
+      #   | trireg [ charge_strength ] [ vectored | scalared ] [ signed ]
+      #     range [ delay3 ] list_of_net_identifiers ;
+      #   | trireg [ drive_strength ] [ vectored | scalared ] [ signed ]
+      #     range [ delay3 ] list_of_net_decl_assignments ;
+      rule net_declaration
+        ((net_type s signed? s delay3? s list_of_net_identifiers s ";") /
+         (net_type s drive_strength? s signed? delay3? s list_of_net_decl_assignments s ";") /
+         (net_type s ("vectored" / "scalared")? s signed? s range s delay3? s list_of_net_identifiers s ";") /
+         (net_type s drive_strength? s ("vectored" / "scalared")? s signed? s range s delay3? list_of_net_decl_assignments s ";") /
+         (trireg s charge_strength? s signed? s delay3? list_of_net_identifiers s ";") /
+         (trireg s drive_strength? s signed? s delay3? list_of_net_decl_assignments s ";") /
+         (trireg s charge_strength? s ("vectored" / "scalared")? s signed? s range s delay3? s list_of_net_identifiers s ";") /
+         (trireg s drive_strength? s ("vectored" / "scalared")? s signed? s range s delay3? s list_of_net_decl_assignments s ";"))
+        {
+          def to_ast
+            n :net_declaration, *elements_to_ast
+          end
+        }
+      end
+      # real_declaration ::= real list_of_real_identifiers ;
+      rule real_declaration
+        "real" s list_of_real_identifiers s ";" {
+          def to_ast
+            n :real_declaration, *elements_to_ast
+          end
+        }
+      end
+      # realtime_declaration ::= realtime list_of_real_identifiers ;
+      rule realtime_declaration
+        "realtime" s list_of_real_identifiers s ";" {
+          def to_ast
+            n :realtime_declaration, *elements_to_ast
+          end
+        }
+      end
+      # reg_declaration ::= reg [ signed ] [ range ]
+      #   list_of_variable_identifiers ;
+      rule reg_declaration
+        "reg" s signed? s range? s list_of_variable_identifiers s ";" {
+          def to_ast
+            n :reg_declaration, *elements_to_ast
+          end
+        }
+      end
+      # time_declaration ::= time list_of_variable_identifiers ;
+      rule time_declaration
+        "time" s list_of_variable_identifiers s ";" {
+          def to_ast
+            n :time_declaration, *elements_to_ast
+          end
+        }
+      end
+
+      # A.2.2 Declaration data types
+
+      # A.2.2.1 Net and variable types
+
+      # net_type ::=
+      #   supply0 | supply1
+      #   | tri | triand | trior | tri0 | tri1
+      #   | uwire | wire | wand | wor
+      rule net_type
+        ("supply0" / "supply1" / "tri" / "triand" / "trior" / "tri0" / "tri1" /
+        "uwire" / "wire" / "wand" / "wor") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+
+      rule trireg
+        "trireg" {
+          def to_ast
+            "trireg"
+          end
+        }
+      end
+      # output_variable_type ::= integer | time
+      rule output_variable_type
+        integer / time
+      end
+      # real_type ::=
+      #   real_identifier { dimension }
+      #   | real_identifier = constant_expression
+      rule real_type
+        ((real_identifier (s dimension)*) /
+         (real_identifier s "=" s constant_expression)) {
+          def to_ast
+            n :real_type, *elements_to_ast
+          end
+         }
+      end
+      # variable_type ::=
+      #   variable_identifier { dimension }
+      #   | variable_identifier = constant_expression
+      rule variable_type
+        ((variable_identifier s "=" s constant_expression) /
+         (variable_identifier (s dimension)*)) {
+          def to_ast
+            n :variable_type, *elements_to_ast
+          end
+         }
+       end
+
+      # A.2.2.2 Strengths
+
+      # drive_strength ::=
+      #   ( strength0 , strength1 )
+      #   | ( strength1 , strength0 )
+      #   | ( strength0 , highz1 )
+      #   | ( strength1 , highz0 )
+      #   | ( highz0 , strength1 )
+      #   | ( highz1 , strength0 )
+      rule drive_strength
+        (("(" s strength0 s "," s strength1 s ")") /
+        ("(" s strength1 s "," s strength0 s ")") /
+        ("(" s strength0 s "," s "highz1" s ")") /
+        ("(" s strength1 s "," s "highz0" s ")") /
+        ("(" s "highz0" s "," s strength1 s ")") /
+        ("(" s "highz1" s "," s strength0 s ")")) {
+          def to_ast
+            n :drive_strength, *elements_to_ast
+          end
+        }
+      end
+      # strength0 ::= supply0 | strong0 | pull0 | weak0
+      rule strength0
+       ("supply0" / "strong0" / "pull0" / "weak0") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # strength1 ::= supply1 | strong1 | pull1 | weak1
+      rule strength1
+        ("supply1" / "strong1" / "pull1" / "weak1") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # charge_strength ::= ( small ) | ( medium ) | ( large )
+      rule charge_strength
+        "(" s val:("small" / "medium" / "large") s ")" {
+          def to_ast
+            n :charge_strength, val.text_value
+          end
+        }
+      end
+
+      # A.2.2.3 Delays
+
+      # delay3 ::=
+      #   # delay_value
+      #   | # ( mintypmax_expression [ , mintypmax_expression [ , mintypmax_expression ] ] )
+      rule delay3
+        (("#" s delay_value) /
+        ("#" s "(" s mintypmax_expression (s "," s mintypmax_expression)? (s "," s mintypmax_expression)? s ")")) {
+          def to_ast
+            n :delay, *elements_to_ast
+          end
+        }
+      end
+      # delay2 ::=
+      #   # delay_value
+      #   | # ( mintypmax_expression [ , mintypmax_expression ] )
+      rule delay2
+        (("#" s delay_value) /
+        ("#" s "(" s mintypmax_expression (s "," s mintypmax_expression)? s ")")) {
+          def to_ast
+            n :delay, *elements_to_ast
+          end
+        }
+      end
+      # delay_value ::=
+      #   unsigned_number
+      #   | real_number
+      #   | identifier
+      rule delay_value
+        unsigned_number / real_number / identifier
+      end
+
+      # A.2.3 Declaration lists
+
+      # list_of_defparam_assignments ::= defparam_assignment { , defparam_assignment }
+      rule list_of_defparam_assignments
+        defparam_assignment (s "," s defparam_assignment)*
+      end
+      # list_of_event_identifiers ::= event_identifier { dimension }
+      #   { , event_identifier { dimension } }
+      rule list_of_event_identifiers
+        event_identifier (s dimension)* s (',' s event_identifier (s dimension)*)*
+      end
+      # list_of_net_decl_assignments ::= net_decl_assignment { , net_decl_assignment }
+      rule list_of_net_decl_assignments
+        net_decl_assignment (s "," s net_decl_assignment)*
+      end
+      # list_of_net_identifiers ::= net_identifier { dimension }
+      #   { , net_identifier { dimension } }
+      rule list_of_net_identifiers
+        net_identifier (s dimension)* (s "," s net_identifier (s dimension)*)*
+      end
+      # list_of_param_assignments ::= param_assignment { , param_assignment }
+      rule list_of_param_assignments
+        param_assignment (s "," s param_assignment)*
+      end
+      # list_of_port_identifiers ::= port_identifier { , port_identifier }
+      rule list_of_port_identifiers
+        port_identifier (s "," s port_identifier)*
+      end
+      # list_of_real_identifiers ::= real_type { , real_type }
+      rule list_of_real_identifiers
+        real_type (s "," s real_type)*
+      end
+      # list_of_specparam_assignments ::= specparam_assignment { , specparam_assignment }
+      rule list_of_specparam_assignments
+        specparam_assignment (s "," s specparam_assignment)*
+      end
+      # list_of_variable_identifiers ::= variable_type { , variable_type }
+      rule list_of_variable_identifiers
+        variable_type (s "," s variable_type)*
+      end
+      # list_of_variable_port_identifiers ::= port_identifier [ = constant_expression ]
+      #   { , port_identifier [ = constant_expression ] }
+      rule list_of_variable_port_identifiers
+        port_identifier (s "=" s constant_expression)? (s "," s port_identifier (s "=" s constant_expression)?)*
+      end
+
+      # A.2.4 Declaration assignments
+
+      # defparam_assignment ::= hierarchical_parameter_identifier = constant_mintypmax_expression
+      rule defparam_assignment
+        hierarchical_parameter_identifier s "=" s constant_mintypmax_expression {
+          def to_ast
+            n :defparam_assignment, *elements_to_ast
+          end
+        }
+      end
+      # net_decl_assignment ::= net_identifier = expression
+      rule net_decl_assignment
+        net_identifier s "=" s expression {
+          def to_ast
+            n :net_decl_assignment, *elements_to_ast
+          end
+        }
+      end
+      # param_assignment ::= parameter_identifier = constant_mintypmax_expression
+      rule param_assignment
+        parameter_identifier s "=" s constant_mintypmax_expression {
+          def to_ast
+            n :param_assignment, *elements_to_ast
+          end
+        }
+      end
+      # specparam_assignment ::=
+      #   specparam_identifier = constant_mintypmax_expression
+      #   | pulse_control_specparam
+      rule specparam_assignment 
+        ((specparam_identifier s "=" s constant_mintypmax_expression) /
+          pulse_control_specparam) {
+          def to_ast
+            n :specparam_assignment, *elements_to_ast
+          end
+        }
+      end
+      # pulse_control_specparam ::=
+      #   PATHPULSE$ = ( reject_limit_value [ , error_limit_value ] )
+      #   | PATHPULSE$specify_input_terminal_descriptor$specify_output_terminal_descriptor
+      #     = ( reject_limit_value [ , error_limit_value ] )
+      rule pulse_control_specparam
+        (("PATHPULSE$" s "=" s "(" s reject_limit_value (s "," s error_limit_value)? s ")") /
+         ("PATHPULSE$" specify_input_terminal_descriptor "$" specify_output_terminal_descriptor s
+          "=" s "(" s reject_limit_value (s "," s error_limit_value)? s ")")) {
+          def to_ast
+            n :pulse_control_specparam, *elements_to_ast
+          end
+        }
+      end
+      # error_limit_value ::= limit_value
+      rule error_limit_value
+        limit_value
+      end
+      # reject_limit_value ::= limit_value
+      rule reject_limit_value
+        limit_value
+      end
+      # limit_value ::= constant_mintypmax_expression
+      rule limit_value
+        constant_mintypmax_expression
+      end
+
+      # A.2.5 Declaration ranges
+
+      # dimension ::= [ dimension_constant_expression : dimension_constant_expression ]
+      rule dimension
+        "[" s dimension_constant_expression s ":" s dimension_constant_expression s "]" {
+          def to_ast
+            n :dimension, *elements_to_ast
+          end
+        }
+      end
+      # range ::= [ msb_constant_expression : lsb_constant_expression ]
+      rule range
+        "[" s msb_constant_expression s ":" s lsb_constant_expression s "]" {
+          def to_ast
+            n :range, *elements_to_ast
+          end
+        }
+      end
+
+      # A.2.6 Function declarations
+
+      # function_declaration ::=
+      #   function [ automatic ] [ function_range_or_type ] function_identifier ;
+      #   function_item_declaration { function_item_declaration }
+      #   function_statement
+      #   endfunction
+      #   | function [ automatic ] [ function_range_or_type ] function_identifier ( function_port_list ) ;
+      #   { block_item_declaration }
+      #   function_statement
+      #   endfunction
+      rule function_declaration
+        (("function" s "automatic"? s function_range_or_type? s function_identifier s ";" s
+        function_item_declaration (s function_item_declaration)* s
+        function_statement s
+        "endfunction") /
+        ("function" s "automatic"? s function_range_or_type? s function_identifier s "(" s function_port_list s ")" s ";" s
+        (s block_item_declaration)* s
+        function_statement s
+        "endfunction")) {
+          def to_ast
+            n :function_declaration, *elements_to_ast
+          end
+        }
+      end
+
+      # function_item_declaration ::=
+      #   block_item_declaration
+      #   | { attribute_instance } tf_input_declaration ;
+      rule function_item_declaration
+        (block_item_declaration /
+         ((s attribute_instance)* s tf_input_declaration s ";")) {
+          def to_ast
+            n :function_item_declaration, *elements_to_ast
+          end
+         }
+      end
+      # function_port_list ::= { attribute_instance } tf_input_declaration { , { attribute_instance }
+      #   tf_input_declaration }
+      rule function_port_list
+        (s attribute_instance)* s tf_input_declaration (s "," (s attribute_instance)* s tf_input_declaration )* {
+          def to_ast
+            n :function_port_list, *elements_to_ast
+          end
+        }
+      end
+      # function_range_or_type ::=
+      #   [ signed ] [ range ]
+      #   | integer
+      #   | real
+      #   | realtime
+      #   | time
+      rule function_range_or_type
+        (signed? range?) / integer / real / realtime / time
+      end
+
+      # A.2.7 Task declarations
+
+      # task_declaration ::=
+      #   task [ automatic ] task_identifier ;
+      #   { task_item_declaration }
+      #   statement_or_null
+      #   endtask
+      #   | task [ automatic ] task_identifier ( [ task_port_list ] ) ;
+      #   { block_item_declaration }
+      #   statement_or_null
+      #   endtask
+      rule task_declaration
+        (("task" s "automatic"? s task_identifier s ";"
+         (s task_item_declaration)* s
+         statement_or_null s
+         "endtask") /
+         ("task" s "automatic"? s task_identifier s "(" s task_port_list? s ")" s ";"
+         (s block_item_declaration)* s
+         statement_or_null s
+         "endtask")) {
+          def to_ast
+            n :task_declaration, *elements_to_ast
+          end
+        }
+      end
+      # task_item_declaration ::=
+      #   block_item_declaration
+      #   | { attribute_instance } tf_input_declaration ;
+      #   | { attribute_instance } tf_output_declaration ;
+      #   | { attribute_instance } tf_inout_declaration ;
+      rule task_item_declaration
+        (((s attribute_instance)* s tf_input_declaration s ";") /
+         ((s attribute_instance)* s tf_output_declaration s ";") /
+         ((s attribute_instance)* s tf_inout_declaration s ";") /
+         block_item_declaration) {
+          def to_ast
+            n :task_item_declaration, *elements_to_ast
+          end
+         }
+       end
+
+      # task_port_list ::= task_port_item { , task_port_item }
+      rule task_port_list
+        task_port_item (s "," s task_port_item)* {
+          def to_ast
+            n :task_port_list, *elements_to_ast
+          end
+        }
+      end
+      # task_port_item ::=
+      #   { attribute_instance } tf_input_declaration
+      #   | { attribute_instance } tf_output_declaration
+      #   | { attribute_instance } tf_inout_declaration
+      rule task_port_item
+        (((s attribute_instance)* s tf_input_declaration) /
+         ((s attribute_instance)* s tf_output_declaration) /
+         ((s attribute_instance)* s tf_inout_declaration)) {
+          def to_ast
+            n :task_port_item, *elements_to_ast
+          end
+        }
+      end
+      # tf_input_declaration ::=
+      #   input [ reg ] [ signed ] [ range ] list_of_port_identifiers
+      #   | input task_port_type list_of_port_identifiers
+      rule tf_input_declaration
+        (("input" s reg? s signed? range? s list_of_port_identifiers) /
+         ("input" s task_port_type s list_of_port_identifiers)) {
+          def to_ast
+            n :tf_input_declaration, *elements_to_ast
+          end
+        }
+      end
+      # tf_output_declaration ::=
+      #   output [ reg ] [ signed ] [ range ] list_of_port_identifiers
+      #   | output task_port_type list_of_port_identifiers
+      rule tf_output_declaration
+        (("output" s reg? s signed? s range? s list_of_port_identifiers) /
+         ("output" s task_port_type s list_of_port_identifiers)) {
+          def to_ast
+            n :tf_output_declaration, *elements_to_ast
+          end
+         }
+       end
+      # tf_inout_declaration ::=
+      #   inout [ reg ] [ signed ] [ range ] list_of_port_identifiers
+      #   | inout task_port_type list_of_port_identifiers
+      rule tf_inout_declaration
+        (("inout" s reg? s signed? s range? s list_of_port_identifiers) /
+         ("inout" s task_port_type s list_of_port_identifiers)) {
+          def to_ast
+            n :tf_inout_declaration, *elements_to_ast
+          end
+         }
+      end
+      # task_port_type ::=
+      #   integer | real | realtime | time
+      rule task_port_type
+        ("integer" / "real" / "realtime" / "time") {
+          def to_ast
+            n :task_port_type, text_value
+          end
+        }
+      end
+
+      # A.2.8 Block item declarations
+
+      # block_item_declaration ::=
+      #   { attribute_instance } reg [ signed ] [ range ] list_of_block_variable_identifiers ;
+      #   | { attribute_instance } integer list_of_block_variable_identifiers ;
+      #   | { attribute_instance } time list_of_block_variable_identifiers ;
+      #   | { attribute_instance } real list_of_block_real_identifiers ;
+      #   | { attribute_instance } realtime list_of_block_real_identifiers ;
+      #   | { attribute_instance } event_declaration
+      #   | { attribute_instance } local_parameter_declaration ;
+      #   | { attribute_instance } parameter_declaration ;
+      rule block_item_declaration
+        (((s attribute_instance)* s reg s signed? s range? s list_of_block_variable_identifiers s ";") /
+         ((s attribute_instance)* s integer s list_of_block_variable_identifiers s ";") /
+         ((s attribute_instance)* s time s list_of_block_variable_identifiers s ";") /
+         ((s attribute_instance)* s real s list_of_block_real_identifiers s ";") /
+         ((s attribute_instance)* s realtime s list_of_block_real_identifiers s ";") /
+         ((s attribute_instance)* s event_declaration) /
+         ((s attribute_instance)* s local_parameter_declaration s ";") /
+         ((s attribute_instance)* s parameter_declaration s ";")) {
+          def to_ast
+            n :block_item_declaration, *elements_to_ast
+          end
+         }
+       end
+      # list_of_block_variable_identifiers ::= block_variable_type { , block_variable_type }
+      rule list_of_block_variable_identifiers
+        block_variable_type (s "," s block_variable_type)* {
+          def to_ast
+            n :list_of_block_variable_identifiers, *elements_to_ast
+          end
+        }
+      end
+      # list_of_block_real_identifiers ::= block_real_type { , block_real_type }
+      rule list_of_block_real_identifiers
+        block_real_type (s "," s block_real_type)* {
+          def to_ast
+            n :list_of_block_real_identifiers, *elements_to_ast
+          end
+        }
+      end
+      # block_variable_type ::= variable_identifier { dimension }
+      rule block_variable_type
+        variable_identifier (s dimension)* {
+          def to_ast
+            n :block_variable_type, *elements_to_ast
+          end
+        }
+      end
+      # block_real_type ::= real_identifier { dimension }
+      rule block_real_type
+        real_identifier (s dimension)* {
+          def to_ast
+            n :block_real_type, *elements_to_ast
+          end
+        }
+      end
+
+      # A.3 Primitive instances
+
+      # A.3.1 Primitive instantiation and instances
+
+      # gate_instantiation ::=
+      #   cmos_switchtype [delay3]
+      #     cmos_switch_instance { , cmos_switch_instance } ;
+      #   | enable_gatetype [drive_strength] [delay3]
+      #     enable_gate_instance { , enable_gate_instance } ;
+      #   | mos_switchtype [delay3]
+      #     mos_switch_instance { , mos_switch_instance } ;
+      #   | n_input_gatetype [drive_strength] [delay2]
+      #     n_input_gate_instance { , n_input_gate_instance } ;
+      #   | n_output_gatetype [drive_strength] [delay2]
+      #     n_output_gate_instance { , n_output_gate_instance } ;
+      #   | pass_en_switchtype [delay2]
+      #     pass_enable_switch_instance { , pass_enable_switch_instance } ;
+      #   | pass_switchtype
+      #     pass_switch_instance { , pass_switch_instance } ;
+      #   | pulldown [pulldown_strength]
+      #     pull_gate_instance { , pull_gate_instance } ;
+      #   | pullup [pullup_strength]
+      #     pull_gate_instance { , pull_gate_instance } ;
+      rule gate_instantiation
+        ((cmos_switchtype s delay3? s
+         cmos_switch_instance (s "," s cmos_switch_instance)* s ";") /
+        (enable_gatetype s drive_strength? s delay3? s
+         enable_gate_instance (s "," s enable_gate_instance)* s ";") /
+        (mos_switchtype  s delay3? s
+         mos_switch_instance (s "," s mos_switch_instance)* s ";") /
+        (n_input_gatetype s drive_strength? s delay2? s
+         n_input_gate_instance (s "," s n_input_gate_instance)* s ";") /
+        (n_output_gatetype s drive_strength? s delay2? s
+         n_output_gate_instance (s "," s n_output_gate_instance)* s ";") /
+        (pass_en_switchtype s delay2? s
+         pass_enable_switch_instance (s "," s pass_enable_switch_instance)* s ";") /
+        (pass_switchtype s
+         pass_switch_instance (s "," s pass_switch_instance)* s ";") /
+        ("pulldown" s pulldown_strength? s
+         pull_gate_instance (s "," s pull_gate_instance)* s ";") /
+        ("pullup" s pullup_strength? s
+         pull_gate_instance (s "," s pull_gate_instance)* s ";")) {
+          def to_ast
+            n :gate_instantiation, *elements_to_ast
+          end
+        }
+
+      end
+      # cmos_switch_instance ::= [ name_of_gate_instance ] ( output_terminal , input_terminal ,
+      #   ncontrol_terminal , pcontrol_terminal )
+      rule cmos_switch_instance
+        name_of_gate_instance? s "(" s output_terminal s "," s input_terminal s "," s
+        ncontrol_terminal s "," s pcontrol_terminal s ")" {
+          def to_ast
+            n :cmos_switch_instance, *elements_to_ast
+          end
+        }
+      end
+      # enable_gate_instance ::= [ name_of_gate_instance ] ( output_terminal , input_terminal , enable_terminal )
+      rule enable_gate_instance
+        name_of_gate_instance? s "(" s output_terminal s "," s input_terminal s "," s enable_terminal s ")" {
+          def to_ast
+            n :enable_gate_instance, *elements_to_ast
+          end
+        }
+      end
+      # mos_switch_instance ::= [ name_of_gate_instance ] ( output_terminal , input_terminal , enable_terminal )
+      rule mos_switch_instance
+        name_of_gate_instance? s "(" s output_terminal s "," s input_terminal s "," s enable_terminal s ")" {
+          def to_ast
+            n :mos_switch_instance, *elements_to_ast
+          end
+        }
+      end
+      # n_input_gate_instance ::= [ name_of_gate_instance ] ( output_terminal , input_terminal { , input_terminal } )
+      rule n_input_gate_instance
+        name_of_gate_instance? s "(" s output_terminal s "," s input_terminal (s "," input_terminal)* s ")" {
+          def to_ast
+            n :n_input_gate_instance, *elements_to_ast
+          end
+        }
+      end
+      # n_output_gate_instance ::= [ name_of_gate_instance ] ( output_terminal { , output_terminal } ,
+      #   input_terminal )
+      rule n_output_gate_instance
+        name_of_gate_instance? s "(" s output_terminal (s "," s output_terminal)* s "," input_terminal s ")" {
+          def to_ast
+            n :n_output_gate_instance, *elements_to_ast
+          end
+        }
+      end
+      # pass_switch_instance ::= [ name_of_gate_instance ] ( inout_terminal , inout_terminal )
+      rule pass_switch_instance
+        name_of_gate_instance? s "(" s inout_terminal s "," s inout_terminal s ")" {
+          def to_ast
+            n :pass_switch_instance, *elements_to_ast
+          end
+        }
+      end
+      # pass_enable_switch_instance ::= [ name_of_gate_instance ] ( inout_terminal , inout_terminal ,
+      #   enable_terminal )
+      rule pass_enable_switch_instance
+        name_of_gate_instance? s "(" s inout_terminal s "," s inout_terminal s "," s enable_terminal s ")" {
+          def to_ast
+            n :pass_enable_switch_instance, *elements_to_ast
+          end
+        }
+      end
+      # pull_gate_instance ::= [ name_of_gate_instance ] ( output_terminal )
+      rule pull_gate_instance
+        name_of_gate_instance? s "(" s output_terminal s ")" {
+          def to_ast
+            n :pull_gate_instance, *elements_to_ast
+          end
+        }
+      end
+      # name_of_gate_instance ::= gate_instance_identifier [ range ]
+      rule name_of_gate_instance
+        gate_instance_identifier s range? {
+          def to_ast
+            n :name_of_gate_instance, *elements_to_ast
+          end
+        }
+      end
+
+      # A.3.2 Primitive strengths
+
+      # pulldown_strength ::=
+      #   ( strength0 , strength1 )
+      #   | ( strength1 , strength0 )
+      #   | ( strength0 )
+      rule pulldown_strength
+        (("(" s strength0 s "," s strength1 s ")") /
+        ("(" s strength1 s "," s strength0 s ")") /
+        ("(" s strength0 s ")")) {
+          def to_ast
+            n :pulldown_strength, *elements_to_ast
+          end
+        }
+      end
+      # pullup_strength ::=
+      #   ( strength0 , strength1 )
+      #   | ( strength1 , strength0 )
+      #   | ( strength1 )
+      rule pullup_strength
+        (("(" s strength0 s "," s strength1 s ")") /
+        ("(" s strength1 s "," s strength0 s ")") /
+        ("(" s strength1 s ")")) {
+          def to_ast
+            n :pullup_strength, *elements_to_ast
+          end
+        }
+      end
+
+      # A.3.3 Primitive terminals
+
+      # enable_terminal ::= expression
+      rule enable_terminal
+        expression {
+          def to_ast
+            n :enable_terminal, *elements_to_ast
+          end
+        }
+      end
+      # inout_terminal ::= net_lvalue
+      rule inout_terminal
+        net_lvalue {
+          def to_ast
+            n :inout_terminal, *elements_to_ast
+          end
+        }
+      end
+      # input_terminal ::= expression
+      rule input_terminal
+        expression {
+          def to_ast
+            n :input_terminal, *elements_to_ast
+          end
+        }
+      end
+      # ncontrol_terminal ::= expression
+      rule ncontrol_terminal
+        expression {
+          def to_ast
+            n :ncontrol_terminal, *elements_to_ast
+          end
+        }
+      end
+      # output_terminal ::= net_lvalue
+      rule output_terminal
+        net_lvalue {
+          def to_ast
+            n :output_terminal, *elements_to_ast
+          end
+        }
+      end
+      # pcontrol_terminal ::= expression
+      rule pcontrol_terminal
+        expression {
+          def to_ast
+            n :pcontrol_terminal, *elements_to_ast
+          end
+        }
+      end
+
+      # A.3.4 Primitive gate and switch types
+
+      # cmos_switchtype ::= cmos | rcmos
+      rule cmos_switchtype
+        ("cmos" / "rcmos") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # enable_gatetype ::= bufif0 | bufif1 | notif0 | notif1
+      rule enable_gatetype
+        ("bufif0" / "bufif1" / "notif0" / "notif1") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # mos_switchtype ::= nmos | pmos | rnmos | rpmos
+      rule mos_switchtype
+        ("nmos" / "pmos" / "rnmos" / "rpmos") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # n_input_gatetype ::= and | nand | or | nor | xor | xnor
+      rule n_input_gatetype
+        ("and" / "nand" / "or" / "nor" / "xor" / "xnor") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # n_output_gatetype ::= buf | not
+      rule n_output_gatetype
+        ("buf" / "not") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # pass_en_switchtype ::= tranif0 | tranif1 | rtranif1 | rtranif0
+      rule pass_en_switchtype
+        ("tranif0" / "tranif1" / "rtranif1" / "rtranif0") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # pass_switchtype ::= tran | rtran
+      rule pass_switchtype
+        ("tran" / "rtran") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+
+      # A.4 Module instantiation and generate construct
+
+      # A.4.1 Module instantiation
+
+      # module_instantiation ::=
+      #   module_identifier [ parameter_value_assignment ]
+      #     module_instance { , module_instance } ;
+      rule module_instantiation
+        module_identifier s parameter_value_assignment? s
+        module_instance (s "," s module_instance)* s ";" {
+          def to_ast
+            n :module_instantiation, *elements_to_ast
+          end
+        }
+      end
+      # parameter_value_assignment ::= # ( list_of_parameter_assignments )
+      rule parameter_value_assignment
+        "#" s "(" s list_of_parameter_assignments s ")" {
+          def to_ast
+            n :parameter_value_assignment, *elements_to_ast
+          end
+        }
+      end
+      # list_of_parameter_assignments ::=
+      #   ordered_parameter_assignment { , ordered_parameter_assignment } |
+      #   named_parameter_assignment { , named_parameter_assignment }
+      rule list_of_parameter_assignments
+        ((ordered_parameter_assignment (s "," s ordered_parameter_assignment)*) /
+        (named_parameter_assignment (s "," s named_parameter_assignment)*)) {
+          def to_ast
+            n :list_of_parameter_assignments, *elements_to_ast
+          end
+        }
+      end
+      # ordered_parameter_assignment ::= expression
+      rule ordered_parameter_assignment
+        expression
+      end
+      # named_parameter_assignment ::= . parameter_identifier ( [ mintypmax_expression ] )
+      rule named_parameter_assignment
+        "." parameter_identifier s "(" s mintypmax_expression? s ")" {
+          def to_ast
+            n :named_parameter_assignment, *elements_to_ast
+          end
+        }
+      end
+      # module_instance ::= name_of_module_instance ( [ list_of_port_connections ] )
+      rule module_instance
+        name_of_module_instance s "(" s list_of_port_connections? s ")" {
+          def to_ast
+            n :module_instance, *elements_to_ast
+          end
+        }
+      end
+      # name_of_module_instance ::= module_instance_identifier [ range ]
+      rule name_of_module_instance
+        module_instance_identifier s range? {
+          def to_ast
+            n :name_of_module_instance, *elements_to_ast
+          end
+        }
+      end
+      # list_of_port_connections ::=
+      #   ordered_port_connection { , ordered_port_connection }
+      #   | named_port_connection { , named_port_connection }
+      rule list_of_port_connections
+        ((named_port_connection (s "," s named_port_connection)*) /
+        (ordered_port_connection (s "," s ordered_port_connection)*)) {
+          def to_ast
+            n :list_of_port_connections, *elements_to_ast
+          end
+        }
+      end
+      # ordered_port_connection ::= { attribute_instance } [ expression ]
+      rule ordered_port_connection
+        (attribute_instance s)* s expression? {
+          def to_ast
+            n :ordered_port_connection, *elements_to_ast
+          end
+        }
+      end
+      # named_port_connection ::= { attribute_instance } . port_identifier ( [ expression ] )
+      rule named_port_connection
+        (attribute_instance s)* s "." port_identifier s "(" s expression? s ")" {
+          def to_ast
+            n :named_port_connection, *elements_to_ast
+          end
+        }
+      end
+
+      # A.4.2 Generate construct
+
+      # generate_region ::=
+      #   generate { module_or_generate_item } endgenerate
+      rule generate_region
+        "generate" (s module_or_generate_item)* s "endgenerate" {
+          def to_ast
+            n :generate_region, *elements_to_ast
+          end
+        }
+      end
+      # genvar_declaration ::=
+      #   genvar list_of_genvar_identifiers ;
+      rule genvar_declaration
+        "genvar" s list_of_genvar_identifiers s ";" {
+          def to_ast
+            n :genvar_declaration, *elements_to_ast
+          end
+        }
+      end
+      # list_of_genvar_identifiers ::=
+      #   genvar_identifier { , genvar_identifier }
+      rule list_of_genvar_identifiers
+        genvar_identifier (s "," s genvar_identifier)* {
+          def to_ast
+            n :list_of_genvar_identifiers, *elements_to_ast
+          end
+        }
+      end
+      # loop_generate_construct ::=
+      #   for ( genvar_initialization ; genvar_expression ; genvar_iteration )
+      #     generate_block
+      rule loop_generate_construct
+        "for" s "(" s genvar_initialization s ";" s genvar_expression s ";" s genvar_iteration s ")" s
+        generate_block {
+          def to_ast
+            n :loop_generate_construct, *elements_to_ast
+          end
+        }
+      end
+      # genvar_initialization ::=
+      #   genvar_identifier = constant_expression
+      rule genvar_initialization
+        genvar_identifier s "=" s constant_expression {
+          def to_ast
+            n :genvar_initialization, *elements_to_ast
+          end
+        }
+      end
+      # genvar_expression ::=
+      #   genvar_primary
+      #   | unary_operator { attribute_instance } genvar_primary
+      #   | genvar_expression binary_operator { attribute_instance } genvar_expression
+      #   | genvar_expression ? { attribute_instance } genvar_expression : genvar_expression
+      rule genvar_expression
+        (genvar_primary /
+        (unary_operator (s attribute_instance)* s genvar_primary) /
+        (genvar_expression s binary_operator (s attribute_instance)* s genvar_expression) /
+        (genvar_expression s "?" (s attribute_instance)* s genvar_expression s ":" s genvar_expression)) {
+          def to_ast
+            n :genvar_expression, *elements_to_ast
+          end
+        }
+      end
+      # genvar_iteration ::=
+      #   genvar_identifier = genvar_expression
+      rule genvar_iteration
+        genvar_identifier s "=" s genvar_expression {
+          def to_ast
+            n :genvar_iteration, *elements_to_ast
+          end
+        }
+      end
+      # genvar_primary ::=
+      #   constant_primary
+      #   | genvar_identifier
+      rule genvar_primary
+        constant_primary / genvar_identifier
+      end
+      # conditional_generate_construct ::=
+      #   if_generate_construct
+      #   | case_generate_construct
+      rule conditional_generate_construct
+        if_generate_construct / case_generate_construct
+      end
+      # if_generate_construct ::=
+      #   if ( constant_expression ) generate_block_or_null
+      #   [ else generate_block_or_null ]
+      rule if_generate_construct
+        "if" s "(" s constant_expression s ")" s generate_block_or_null s
+        ("else" s generate_block_or_null)? {
+          def to_ast
+            n :if_generate_construct, *elements_to_ast
+          end
+        }
+      end
+      # case_generate_construct ::=
+      #   case ( constant_expression )
+      #     case_generate_item { case_generate_item } endcase
+      rule case_generate_construct
+        "case" s "(" s constant_expression s ")" s
+         case_generate_item (s case_generate_item)* s "endcase" {
+           def to_ast
+             n :case_generate_construct, *elements_to_ast
+           end
+         }
+      end
+      # case_generate_item ::=
+      #   constant_expression { , constant_expression } : generate_block_or_null
+      #   | default [ : ] generate_block_or_null
+      rule case_generate_item
+        ((constant_expression (s "," s constant_expression)* s ":" s generate_block_or_null) /
+        (default s ":"? s generate_block_or_null)) {
+          def to_ast
+            n :case_generate_item, *elements_to_ast
+          end
+        }
+      end
+      # generate_block ::=
+      #   module_or_generate_item
+      #   | begin [ : generate_block_identifier ] { module_or_generate_item } end
+      rule generate_block
+        (module_or_generate_item / 
+        ("begin" s (":" s generate_block_identifier)? (s module_or_generate_item)* s "end")) {
+          def to_ast
+            n :generate_block, *elements_to_ast
+          end
+        }
+      end
+      # generate_block_or_null ::=
+      #   generate_block
+      #   | ;
+      rule generate_block_or_null
+        (generate_block / (s ";")) {
+          def to_ast
+            elements_to_ast.first
+          end
+        }
+      end
+
+      # A.5 UDP declaration and instantiation
+
+      # A.5.1 UDP declaration
+
+      # udp_declaration ::=
+      #   { attribute_instance } primitive udp_identifier ( udp_port_list ) ;
+      #   udp_port_declaration { udp_port_declaration }
+      #   udp_body
+      #   endprimitive
+      #   | { attribute_instance } primitive udp_identifier ( udp_declaration_port_list ) ;
+      #   udp_body
+      #   endprimitive
+      rule udp_declaration
+        (((s attribute_instance)* s "primitive" S udp_identifier s "(" s udp_port_list s ")" s ";" s
+         udp_port_declaration (s udp_port_declaration)* s
+         udp_body s
+         "endprimitive") /
+         ((s attribute_instance)* s "primitive" S udp_identifier s "(" s udp_declaration_port_list s ")" s ";" s
+         udp_body s
+         "endprimitive")) {
+          def to_ast
+            n :udp_declaration, *elements_to_ast
+          end
+        }
+      end
+
+      # A.5.2 UDP ports
+
+      # udp_port_list ::= output_port_identifier , input_port_identifier { , input_port_identifier }
+      rule udp_port_list
+        output_port_identifier s "," s input_port_identifier (s "," s input_port_identifier)* {
+          def to_ast
+            n :udp_port_list, *elements_to_ast
+          end
+        }
+      end
+      # udp_declaration_port_list ::=
+      #   udp_output_declaration , udp_input_declaration { , udp_input_declaration }
+      rule udp_declaration_port_list
+        udp_output_declaration s "," s udp_input_declaration (s "," s udp_input_declaration)* {
+          def to_ast
+            n :udp_declaration_port_list, *elements_to_ast
+          end
+        }
+      end
+      # udp_port_declaration ::=
+      #   udp_output_declaration ;
+      #   | udp_input_declaration ;
+      #   | udp_reg_declaration ;
+      rule udp_port_declaration
+        ((udp_output_declaration s ";") /
+         (udp_input_declaration s ";") /
+         (udp_reg_declarations s ";")) {
+          def to_ast
+            n :udp_port_declaration, *elements_to_ast
+          end
+        }
+      end
+      # udp_output_declaration ::=
+      #   { attribute_instance } output port_identifier
+      #   | { attribute_instance } output reg port_identifier [ = constant_expression ]
+      rule udp_output_declaration
+        (((s attribute_instance)* s "output" s reg s port_identifier (s "=" s constant_expression)?) /
+         ((s attribute_instance)* s "output" s port_identifier)) {
+          def to_ast
+            n :udp_output_declaration, *elements_to_ast
+          end
+        }
+      end
+      # udp_input_declaration ::= { attribute_instance } input list_of_port_identifiers
+      rule udp_input_declaration
+        (s attribute_instance)* s "input" S list_of_port_identifiers {
+           def to_ast
+             n :udp_input_declaration, *elements_to_ast
+           end
+        }
+      end
+      # udp_reg_declaration ::= { attribute_instance } reg variable_identifier
+      rule udp_reg_declaration
+        (s attribute_instance)* s "reg" S variable_identifier {
+           def to_ast
+             n :udp_reg_declaration, *elements_to_ast
+           end
+        }
+      end
+
+      # A.5.3 UDP body
+
+      # udp_body ::= combinational_body | sequential_body
+      rule udp_body
+        combinational_body / sequential_body
+      end
+      # combinational_body ::= table combinational_entry { combinational_entry } endtable
+      rule combinational_body
+        "table" S combinational_entry (s combinational_entry)* s "endtable" {
+          def to_ast
+            n :combinational_body, *elements_to_ast
+          end
+        }
+      end
+      # combinational_entry ::= level_input_list : output_symbol ;
+      rule combinational_entry
+        level_input_list s ":" s output_symbol s ";" {
+          def to_ast
+            n :combinational_entry, *elements_to_ast
+          end
+        }
+      end
+      # sequential_body ::= [ udp_initial_statement ] table sequential_entry { sequential_entry } endtable
+      rule sequential_body
+        udp_initial_statement? s "table" S sequential_entry (s sequential_entry)* s "endtable" {
+          def to_ast
+            n :sequential_body, *elements_to_ast
+          end
+        }
+      end
+      # udp_initial_statement ::= initial output_port_identifier = init_val ;
+      rule udp_initial_statement
+        "initial" S output_port_identifier s "=" s init_val s ";" {
+          def to_ast
+            n :udp_initial_statement, *elements_to_ast
+          end
+        }
+      end
+      # init_val ::= 1'b0 | 1'b1 | 1'bx | 1'bX | 1'B0 | 1'B1 | 1'Bx | 1'BX | 1 | 0
+      rule init_val
+        "1'b0" / "1'b1" / "1'bx" / "1'bX" / "1'B0" / "1'B1" / "1'Bx" / "1'BX" / "1" / "0" {
+          def to_ast
+            n :init_val, text_value[-1]
+          end
+        }
+      end
+      # sequential_entry ::= seq_input_list : current_state : next_state ;
+      rule sequential_entry
+        seq_input_list s ":" s current_state s ":" s next_state s ";" {
+          def to_ast
+            n :sequential_entry, *elements_to_ast
+          end
+        }
+      end
+      # seq_input_list ::= level_input_list | edge_input_list
+      rule seq_input_list
+        level_input_list / edge_input_list
+      end
+      # level_input_list ::= level_symbol { level_symbol }
+      rule level_input_list
+        level_symbol (s level_symbol)* {
+          def to_ast
+            n :level_input_list, *elements_to_ast
+          end
+        }
+      end
+      # edge_input_list ::= { level_symbol } edge_indicator { level_symbol }
+      rule edge_input_list
+        (s level_symbol)* s edge_indicator (s level_symbol)* {
+          def to_ast
+            n :edge_input_list, *elements_to_ast
+          end
+        }
+      end
+      # edge_indicator ::= ( level_symbol level_symbol ) | edge_symbol
+      rule edge_indicator
+        (("(" s level_symbol level_symbol s ")") / edge_symbol) {
+          def to_ast
+            n :edge_indicator, *elements_to_ast
+          end
+        }
+      end
+      # current_state ::= level_symbol
+      rule current_state
+        level_symbol {
+          def to_ast
+            n :current_state, *elements_to_ast
+          end
+        }
+      end
+      # next_state ::= output_symbol | -
+      rule next_state
+        (output_symbol / "-") {
+          def to_ast
+            n :next_state, *elements_to_ast
+          end
+        }
+      end
+      # output_symbol ::= 0 | 1 | x | X
+      rule output_symbol
+        ("0" / "1" / "x" / "X") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # level_symbol ::= 0 | 1 | x | X | ? | b | B
+      rule level_symbol
+        ("0" / "1" / "x" / "X" / "?" / "b" / "B") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # edge_symbol ::= r | R | f | F | p | P | n | N | *
+      rule edge_symbol
+        ("r" / "R" / "f" / "F" / "p" / "P" / "n" / "N" / "*") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+
+      # A.5.4 UDP instantiation
+
+      # udp_instantiation ::= udp_identifier [ drive_strength ] [ delay2 ]
+      #   udp_instance { , udp_instance } ;
+      rule udp_instantiation
+        udp_identifier s drive_strength? s delay2? s
+        udp_instance (s "," s udp_instance)* s ";" {
+          def to_ast
+            n :udp_instantiation, *elements_to_ast
+          end
+        }
+      end
+      # udp_instance ::= [ name_of_udp_instance ] ( output_terminal , input_terminal
+      #   { , input_terminal } )
+      rule udp_instance
+        name_of_udp_instance? s "(" s output_terminal s "," s input_terminal (s "," s input_terminal)* s ")" {
+          def to_ast
+            n :udp_instance, *elements_to_ast
+          end
+        }
+      end
+      # name_of_udp_instance ::= udp_instance_identifier [ range ]
+      rule name_of_udp_instance
+        udp_instance_identifier s range? {
+          def to_ast
+            n :name_of_udp_instance, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6 Behavioral statements
+
+      # A.6.1 Continuous assignment statements
+
+      # continuous_assign ::= assign [ drive_strength ] [ delay3 ] list_of_net_assignments ;
+      rule continuous_assign
+        "assign" s drive_strength? s delay3? s list_of_net_assignments s ";" {
+          def to_ast
+            n :continuous_assign, *elements_to_ast
+          end
+        }
+      end
+      # list_of_net_assignments ::= net_assignment { , net_assignment }
+      rule list_of_net_assignments
+        net_assignment (s "," s net_assignment)* {
+          def to_ast
+            n :list_of_net_assignments, *elements_to_ast
+          end
+        }
+      end
+      # net_assignment ::= net_lvalue = expression
+      rule net_assignment
+        net_lvalue s "=" s expression {
+          def to_ast
+            n :net_assignment, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6.2 Procedural blocks and assignments
+
+      # initial_construct ::= initial statement
+      rule initial_construct
+        "initial" s statement {
+          def to_ast
+            n :initial_construct, *elements_to_ast
+          end
+        }
+      end
+      # always_construct ::= always statement
+      rule always_construct
+        "always" s statement {
+          def to_ast
+            n :always_construct, *elements_to_ast
+          end
+        }
+      end
+      # blocking_assignment ::= variable_lvalue = [ delay_or_event_control ] expression
+      rule blocking_assignment
+        variable_lvalue s "=" s delay_or_event_control? s expression {
+          def to_ast
+            n :blocking_assignment, *elements_to_ast
+          end
+        }
+      end
+      # nonblocking_assignment ::= variable_lvalue <= [ delay_or_event_control ] expression
+      rule nonblocking_assignment
+        variable_lvalue s "<=" s delay_or_event_control? s expression {
+          def to_ast
+            n :nonblocking_assignment, *elements_to_ast
+          end
+        }
+      end
+      # procedural_continuous_assignments ::=
+      #   assign variable_assignment
+      #   | deassign variable_lvalue
+      #   | force variable_assignment
+      #   | force net_assignment
+      #   | release variable_lvalue
+      #   | release net_lvalue
+      rule procedural_continuous_assignments
+        ("assign" s variable_assignment) /
+        ("deassign" s variable_lvalue) /
+        ("force" s variable_assignment) /
+        ("force" s net_assignment) /
+        ("release" s variable_lvalue) /
+        ("release" s net_lvalue)
+      end
+      # variable_assignment ::= variable_lvalue = expression
+      rule variable_assignment
+        variable_lvalue s "=" s expression {
+          def to_ast
+            n :variable_assignment, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6.3 Parallel and sequential blocks
+
+      # par_block ::= fork [ : block_identifier
+      #   { block_item_declaration } ] { statement } join
+      rule par_block
+        "fork" (s ":" s block_identifier (s block_item_declaration)*)? (s statement)* s "join" {
+          def to_ast
+            n :par_block, *elements_to_ast
+          end
+        }
+      end
+      # seq_block ::= begin [ : block_identifier
+      #   { block_item_declaration } ] { statement } end
+      rule seq_block
+        "begin" (s ":" s block_identifier (s block_item_declaration)*)? (s statement)* s "end" {
+          def to_ast
+            n :seq_block, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6.4 Statements
+
+      # statement ::=
+      #   { attribute_instance } blocking_assignment ;
+      #   | { attribute_instance } case_statement
+      #   | { attribute_instance } conditional_statement
+      #   | { attribute_instance } disable_statement
+      #   | { attribute_instance } event_trigger
+      #   | { attribute_instance } loop_statement
+      #   | { attribute_instance } nonblocking_assignment ;
+      #   | { attribute_instance } par_block
+      #   | { attribute_instance } procedural_continuous_assignments ;
+      #   | { attribute_instance } procedural_timing_control_statement
+      #   | { attribute_instance } seq_block
+      #   | { attribute_instance } system_task_enable
+      #   | { attribute_instance } task_enable
+      #   | { attribute_instance } wait_statement
+      rule statement
+        (((s attribute_instance)* s blocking_assignment s ";") /
+         ((s attribute_instance)* s case_statement) /
+         ((s attribute_instance)* s conditional_statement) /
+         ((s attribute_instance)* s disable_statement) /
+         ((s attribute_instance)* s event_trigger) /
+         ((s attribute_instance)* s loop_statement) /
+         ((s attribute_instance)* s nonblocking_assignment s ";") /
+         ((s attribute_instance)* s par_block) /
+         ((s attribute_instance)* s procedural_continuous_assignments s ";") /
+         ((s attribute_instance)* s procedural_timing_control_statement) /
+         ((s attribute_instance)* s seq_block) /
+         ((s attribute_instance)* s system_task_enable) /
+         ((s attribute_instance)* s task_enable) /
+         ((s attribute_instance)* s wait_statement)) {
+          def to_ast
+            n :statement, *elements_to_ast
+          end
+        }
+      end
+      # statement_or_null ::=
+      #   statement
+      #   | { attribute_instance } ;
+      rule statement_or_null
+        (statement / ((s attribute_instance)* s ";")) {
+          def to_ast
+            elements_to_ast.first
+          end
+        }
+      end
+      # function_statement1 ::= statement
+      rule function_statement1
+        statement
+      end
+
+      # A.6.5 Timing control statements
+
+      # delay_control ::=
+      #   # delay_value
+      #   | # ( mintypmax_expression )
+      rule delay_control
+        (("#" s delay_value) /
+         ("#" s "(" s mintypmax_expression s ")")) {
+          def to_ast
+            n :delay_control, *elements_to_ast
+          end
+         }
+      end
+      # delay_or_event_control ::=
+      #   delay_control
+      #   | event_control
+      #   | repeat ( expression ) event_control
+      rule delay_or_event_control
+        (delay_control / event_control / ("repeat" s "(" s expression s ")" s event_control)) {
+          def to_ast
+            n :delay_or_event_control, *elements_to_ast
+          end
+        }
+      end
+      # disable_statement ::=
+      #   disable hierarchical_task_identifier ;
+      #   | disable hierarchical_block_identifier ;
+      rule disable_statement
+        (("disable" s hierarchical_task_identifier s ";") /
+         ("disable" s hierarchical_block_identifier s ";")) {
+          def to_ast
+            n :disable_statement, *elements_to_ast
+          end
+         }
+      end
+      # event_control ::=
+      #   @ hierarchical_event_identifier
+      #   | @ ( event_expression )
+      #   | @*
+      #   | @ (*)
+      rule event_control
+        (("@" s hierarchical_event_identifier) /
+         ("@" s "(" s event_expression s ")") /
+         ("@" s "*") /
+         ("@" s "(" s "*" s ")")) {
+          def to_ast
+            n :event_control, *elements_to_ast
+          end
+         }
+      end
+      # event_trigger ::=
+      #   -> hierarchical_event_identifier { [ expression ] } ;
+      rule event_trigger
+        "->" s hierarchical_event_identifier (s "[" s expression s "]")* s ";" {
+          def to_ast
+            n :event_trigger, *elements_to_ast
+          end
+        }
+      end
+      # event_expression ::=
+      #   expression
+      #   | posedge expression
+      #   | negedge expression
+      #   | event_expression or event_expression
+      #   | event_expression , event_expression
+      rule event_expression
+        (("posedge" s expression event_expression_tail?) /
+         ("negedge" s expression event_expression_tail?) /
+         (expression event_expression_tail?)) {
+          def to_ast
+            n :event_expression, *elements_to_ast
+          end
+        }
+      end
+      rule event_expression_tail
+        (s "or" s event_expression event_expression_tail?) /
+        (s "," s event_expression event_expression_tail?)
+      end
+      # procedural_timing_control ::=
+      #   delay_control
+      #   | event_control
+      rule procedural_timing_control
+        delay_control / event_control
+      end
+      # procedural_timing_control_statement ::=
+      #   procedural_timing_control statement_or_null
+      rule procedural_timing_control_statement
+        procedural_timing_control s statement_or_null {
+          def to_ast
+            n :procedural_timing_control_statement, *elements_to_ast
+          end
+        }
+      end
+      # wait_statement ::=
+      #   wait ( expression ) statement_or_null
+      rule wait_statement
+        "wait" s "(" s expression s ")" s statement_or_null {
+          def to_ast
+            n :wait_statement, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6.6 Conditional statements
+
+      # conditional_statement ::=
+      #   if ( expression )
+      #     statement_or_null [ else statement_or_null ]
+      #   | if_else_if_statement
+      rule conditional_statement
+        (("if" s "(" s expression s ")" s
+          statement_or_null (s "else" s statement_or_null)?) / 
+          if_else_if_statement) {
+          def to_ast
+            n :conditional_statement, *elements_to_ast
+          end
+        }
+      end
+      # if_else_if_statement ::=
+      #   if ( expression ) statement_or_null
+      #   { else if ( expression ) statement_or_null }
+      #   [ else statement_or_null ]
+      rule if_else_if_statement
+        "if" s "(" s expression s ")" s statement_or_null 
+        (s "else" s "if" s "(" s expression s ")" s statement_or_null)*
+        (s "else" s statement_or_null)? {
+          def to_ast
+            n :if_else_if_statement, *elements_to_ast
+          end
+        }
+      end
+
+      # A.6.7 Case statements
+
+      # case_statement ::=
+      #   case ( expression )
+      #     case_item { case_item } endcase
+      #   | casez ( expression )
+      #     case_item { case_item } endcase
+      #   | casex ( expression )
+      #     case_item { case_item } endcase
+      rule case_statement
+        (("case"  s "(" s expression s ")" s case_item (s case_item)* s "endcase") / 
+         ("casez" s "(" s expression s ")" s case_item (s case_item)* s "endcase") /
+         ("casex" s "(" s expression s ")" s case_item (s case_item)* s "endcase")) {
+          def to_ast
+            n :case_statement, *elements_to_ast
+          end
+         }
+      end
+      # case_item ::=
+      #   expression { , expression } : statement_or_null
+      #   | default [ : ] statement_or_null
+      rule case_item
+        ((expression (s "," s expression)* s ":" s statement_or_null) /
+         ("default" s ":"? s statement_or_null)) {
+          def to_ast
+            n :case_item, *elements_to_ast
+          end
+         }
+      end
+
+      # A.6.8 Looping statements
+
+      # loop_statement ::=
+      #   forever statement
+      #   | repeat ( expression ) statement
+      #   | while ( expression ) statement
+      #   | for ( variable_assignment ; expression ; variable_assignment )
+      #   statement
+      rule loop_statement
+        (("forever" s statement) /
+         ("repeat" s "(" s expression s ")" s statement) /
+         ("while" s "(" s expression s ")" s statement) /
+         ("for" s "(" s variable_assignment s ";" s expression s ";" s variable_assignment s ")" s statement)) {
+          def to_ast
+            n :loop_statement, *elements_to_ast
+          end
+         }
+      end
+
+      # A.6.9 Task enable statements
+
+      # system_task_enable ::= system_task_identifier [ ( [ expression ] { , [ expression ] } ) ] ;
+      rule system_task_enable
+        system_task_identifier (s "(" s expression? s (s "," expression? )* s ")")? s ";" {
+          def to_ast
+            n :system_task_enable, *elements_to_ast
+          end
+        }
+      end
+      # task_enable ::= hierarchical_task_identifier [ ( expression { , expression } ) ] ;
+      rule task_enable
+        hierarchical_task_identifier (s "(" s expression (s "," s expression)* s ")")? s ";" {
+          def to_ast
+            n :task_enable, *elements_to_ast
+          end
+        }
+      end
+
+      # A.7 Specify section
+
+      # A.7.1 Specify block declaration
+
+      # specify_block ::= specify { specify_item } endspecify
+      rule specify_block
+        "specify" (s specify_item)* s "endspecify" {
+          def to_ast
+            n :specify_block, *elements_to_ast
+          end
+        }
+      end
+      # specify_item ::=
+      #   specparam_declaration
+      #   | pulsestyle_declaration
+      #   | showcancelled_declaration
+      #   | path_declaration
+      #   | system_timing_check
+      rule specify_item
+        specparam_declaration /
+        pulsestyle_declaration /
+        showcancelled_declaration /
+        path_declaration /
+        system_timing_check
+      end
+      # pulsestyle_declaration ::=
+      #   pulsestyle_onevent list_of_path_outputs ;
+      #   | pulsestyle_ondetect list_of_path_outputs ;
+      rule pulsestyle_declaration
+        (("pulsestyle_onevent" S list_of_path_outputs s ";") /
+         ("pulsestyle_ondetect" S list_of_path_outputs s ";")) {
+          def to_ast
+            n :pulsestyle_declaration, *elements_to_ast
+          end
+         }
+      end
+      # showcancelled_declaration ::=
+      #   showcancelled list_of_path_outputs ;
+      #   | noshowcancelled list_of_path_outputs ;
+      rule showcancelled_declaration
+        (("showcancelled" S list_of_path_outputs s ";") /
+         ("noshowcancelled" S list_of_path_outputs s ";")) {
+          def to_ast
+            n :showcancelled_declaration, *elements_to_ast
+          end
+         }
+      end
+
+      # A.7.2 Specify path declarations
+
+      # path_declaration ::=
+      #   simple_path_declaration ;
+      #   | edge_sensitive_path_declaration ;
+      #   | state_dependent_path_declaration ;
+      rule path_declaration
+        ((edge_sensitive_path_declaration s ";") /
+         (state_dependent_path_declaration s ";") /
+         (simple_path_declaration s ";")) {
+          def to_ast
+            n :path_declaration, *elements_to_ast
+          end
+         }
+      end
+      # simple_path_declaration ::=
+      #   parallel_path_description = path_delay_value
+      #   | full_path_description = path_delay_value
+      rule simple_path_declaration
+        ((parallel_path_description s "=" s path_delay_value) /
+         (full_path_description s "=" s path_delay_value)) {
+          def to_ast
+            n :simple_path_declaration, *elements_to_ast
+          end
+         }
+      end
+      # parallel_path_description ::=
+      #   ( specify_input_terminal_descriptor [ polarity_operator ] => specify_output_terminal_descriptor )
+      rule parallel_path_description
+        "(" s specify_input_terminal_descriptor s polarity_operator? s "=>" s specify_output_terminal_descriptor s ")" {
+          def to_ast
+            n :parallel_path_description, *elements_to_ast
+          end
+        }
+      end
+      # full_path_description ::=
+      #   ( list_of_path_inputs [ polarity_operator ] *> list_of_path_outputs )
+      rule full_path_description
+        "(" s list_of_path_inputs s polarity_operator? s "*>" s list_of_path_outputs s ")" {
+          def to_ast
+            n :full_path_description, *elements_to_ast
+          end
+        }
+      end
+      # list_of_path_inputs ::=
+      #   specify_input_terminal_descriptor { , specify_input_terminal_descriptor }
+      rule list_of_path_inputs
+        specify_input_terminal_descriptor (s "," s specify_input_terminal_descriptor) {
+          def to_ast
+            n :list_of_path_inputs, *elements_to_ast
+          end
+        }
+      end
+      # list_of_path_outputs ::=
+      #   specify_output_terminal_descriptor { , specify_output_terminal_descriptor }
+      rule list_of_path_outputs
+        specify_output_terminal_descriptor (s "," s specify_output_terminal_descriptor) {
+          def to_ast
+            n :list_of_path_outputs, *elements_to_ast
+          end
+        }
+      end
+
+      # A.7.3 Specify block terminals
+
+      # specify_input_terminal_descriptor ::=
+      #   input_identifier [ [ constant_range_expression ] ]
+      rule specify_input_terminal_descriptor
+        input_identifier ("[" s constant_range_expression s "]")? {
+          def to_ast
+            n :specify_input_terminal_descriptor, *elements_to_ast
+          end
+        }
+      end
+      # specify_output_terminal_descriptor ::=
+      #   output_identifier [ [ constant_range_expression ] ]
+      rule specify_output_terminal_descriptor
+        output_identifier ("[" s constant_range_expression s "]")? {
+          def to_ast
+            n :specify_output_terminal_descriptor, *elements_to_ast
+          end
+        }
+      end
+      # input_identifier ::= input_port_identifier | inout_port_identifier
+      rule input_identifier
+        input_port_identifier / inout_port_identifier
+      end
+      # output_identifier ::= output_port_identifier | inout_port_identifier
+      rule output_identifier
+        output_port_identifier / inout_port_identifier
+      end
+
+      # A.7.4 Specify path delays
+
+      # path_delay_value ::=
+      #   list_of_path_delay_expressions
+      #   | ( list_of_path_delay_expressions )
+      rule path_delay_value
+        (list_of_path_delay_expressions /
+         ("(" s list_of_path_delay_expressions s ")")) {
+          def to_ast
+            n :path_delay_value, *elements_to_ast
+          end
+        }
+      end
+      # list_of_path_delay_expressions ::=
+      #   t_path_delay_expression
+      #   | trise_path_delay_expression , tfall_path_delay_expression
+      #   | trise_path_delay_expression , tfall_path_delay_expression , tz_path_delay_expression
+      #   | t01_path_delay_expression , t10_path_delay_expression , t0z_path_delay_expression ,
+      #   tz1_path_delay_expression , t1z_path_delay_expression , tz0_path_delay_expression
+      #   | t01_path_delay_expression , t10_path_delay_expression , t0z_path_delay_expression ,
+      #   tz1_path_delay_expression , t1z_path_delay_expression , tz0_path_delay_expression ,
+      #   t0x_path_delay_expression , tx1_path_delay_expression , t1x_path_delay_expression ,
+      #   tx0_path_delay_expression , txz_path_delay_expression , tzx_path_delay_expression
+      rule list_of_path_delay_expressions
+        ((trise_path_delay_expression s "," s tfall_path_delay_expression) /
+         (trise_path_delay_expression s "," s tfall_path_delay_expression s "," s tz_path_delay_expression) /
+         (t01_path_delay_expression s "," s t10_path_delay_expression s "," s t0z_path_delay_expression s "," s
+          tz1_path_delay_expression s "," s t1z_path_delay_expression s "," s tz0_path_delay_expression) /
+         (t01_path_delay_expression s "," s t10_path_delay_expression s "," s t0z_path_delay_expression s "," s
+          tz1_path_delay_expression s "," s t1z_path_delay_expression s "," s tz0_path_delay_expression s "," s
+          t0x_path_delay_expression s "," s tx1_path_delay_expression s "," s t1x_path_delay_expression s "," s
+          tx0_path_delay_expression s "," s txz_path_delay_expression s "," s tzx_path_delay_expression) /
+         t_path_delay_expression) {
+          def to_ast
+            n :list_of_path_delay_expressions, *elements_to_ast
+          end
+         }
+      end
+      # t_path_delay_expression ::= path_delay_expression
+      rule t_path_delay_expression
+        path_delay_expression
+      end
+      # trise_path_delay_expression ::= path_delay_expression
+      rule trise_path_delay_expression
+        path_delay_expression
+      end
+      # tfall_path_delay_expression ::= path_delay_expression
+      rule tfall_path_delay_expression
+        path_delay_expression
+      end
+      # tz_path_delay_expression ::= path_delay_expression
+      rule tz_path_delay_expression
+        path_delay_expression
+      end
+      # t01_path_delay_expression ::= path_delay_expression
+      rule t01_path_delay_expression
+        path_delay_expression
+      end
+      # t10_path_delay_expression ::= path_delay_expression
+      rule t10_path_delay_expression
+        path_delay_expression
+      end
+      # t0z_path_delay_expression ::= path_delay_expression
+      rule t0z_path_delay_expression
+        path_delay_expression
+      end
+      # tz1_path_delay_expression ::= path_delay_expression
+      rule tz1_path_delay_expression
+        path_delay_expression
+      end
+      # t1z_path_delay_expression ::= path_delay_expression
+      rule t1z_path_delay_expression
+        path_delay_expression
+      end
+      # tz0_path_delay_expression ::= path_delay_expression
+      rule tz0_path_delay_expression
+        path_delay_expression
+      end
+      # t0x_path_delay_expression ::= path_delay_expression
+      rule t0x_path_delay_expression
+        path_delay_expression
+      end
+      # tx1_path_delay_expression ::= path_delay_expression
+      rule tx1_path_delay_expression
+        path_delay_expression
+      end
+      # t1x_path_delay_expression ::= path_delay_expression
+      rule t1x_path_delay_expression
+        path_delay_expression
+      end
+      # tx0_path_delay_expression ::= path_delay_expression
+      rule tx0_path_delay_expression
+        path_delay_expression
+      end
+      # txz_path_delay_expression ::= path_delay_expression
+      rule txz_path_delay_expression
+        path_delay_expression
+      end
+      # tzx_path_delay_expression ::= path_delay_expression
+      rule tzx_path_delay_expression
+        path_delay_expression
+      end
+      # path_delay_expression ::= constant_mintypmax_expression
+      rule path_delay_expression
+        constant_mintypmax_expression
+      end
+      # edge_sensitive_path_declaration ::=
+      #   parallel_edge_sensitive_path_description = path_delay_value
+      #   | full_edge_sensitive_path_description = path_delay_value
+      rule edge_sensitive_path_declaration
+        ((parallel_edge_sensitive_path_description s "=" s path_delay_value) /
+         (full_edge_sensitive_path_description s "=" s path_delay_value)) {
+          def to_ast
+            n :edge_sensitive_path_declaration, *elements_to_ast
+          end
+         }
+      end
+      # parallel_edge_sensitive_path_description ::=
+      #   ( [ edge_identifier ] specify_input_terminal_descriptor =>
+      #     ( specify_output_terminal_descriptor [ polarity_operator ] : data_source_expression ) )
+      rule parallel_edge_sensitive_path_description
+        "(" s edge_identifier? s specify_input_terminal_descriptor s "=>" s
+        "(" s specify_output_terminal_descriptor s polarity_operator? s ":" s data_source_expression s ")" s ")" {
+          def to_ast
+            n :parallel_edge_sensitive_path_description, *elements_to_ast
+          end
+        }
+      end
+      # full_edge_sensitive_path_description ::=
+      #   ( [ edge_identifier ] list_of_path_inputs *>
+      #     ( list_of_path_outputs [ polarity_operator ] : data_source_expression ) )
+      rule full_edge_sensitive_path_description
+        "(" s edge_identifier? s list_of_path_inputs s "*>" s
+        "(" s list_of_path_outputs s polarity_operator? s ":" s data_source_expression s ")" s ")" {
+          def to_ast
+            n :full_edge_sensitive_path_description, *elements_to_ast
+          end
+        }
+      end
+      # data_source_expression ::= expression
+      rule data_source_expression
+        expression
+      end
+      # edge_identifier ::= posedge | negedge
+      rule edge_identifier
+        ("posedge" / "negedge") {
+          def to_ast
+            n :edge_identifier, text_value
+          end
+        }
+      end
+      # state_dependent_path_declaration ::=
+      #   if ( module_path_expression ) simple_path_declaration
+      #   | if ( module_path_expression ) edge_sensitive_path_declaration
+      #   | ifnone simple_path_declaration
+      rule state_dependent_path_declaration
+        (("if" s "(" s module_path_expression s ")" s simple_path_declaration) /
+         ("if" s "(" s module_path_expression s ")" s edge_sensitive_path_declaration) /
+         ("ifnone" s simple_path_declaration)) {
+          def to_ast
+            n :state_dependent_path_declaration, *elements_to_ast
+          end
+         }
+       end
+      # polarity_operator ::= + | -
+      rule polarity_operator
+        ("+" / "-") {
+          def to_ast
+            n :polarity_operator, text_value
+          end
+        }
+      end
+
+      # A.7.5 System timing checks
+
+      # A.7.5.1 System timing check commands
+
+      # system_timing_check ::=
+      #   $setup_timing_check
+      #   | $hold_timing_check
+      #   | $setuphold_timing_check
+      #   | $recovery_timing_check
+      #   | $removal_timing_check
+      #   | $recrem_timing_check
+      #   | $skew_timing_check
+      #   | $timeskew_timing_check
+      #   | $fullskew_timing_check
+      #   | $period_timing_check
+      #   | $width_timing_check
+      #   | $nochange_timing_check
+      rule system_timing_check
+        (setup_timing_check /
+         hold_timing_check /
+         setuphold_timing_check /
+         recovery_timing_check /
+         removal_timing_check /
+         recrem_timing_check /
+         skew_timing_check /
+         timeskew_timing_check /
+         fullskew_timing_check /
+         period_timing_check /
+         width_timing_check /
+         nochange_timing_check) {
+          def to_ast
+            n :system_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $setup_timing_check ::=
+      #   $setup ( data_event , reference_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule setup_timing_check
+        "$setup" s "(" s data_event s "," s reference_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :setup_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $hold_timing_check ::=
+      #   $hold ( reference_event , data_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule hold_timing_check
+        "$hold" s "(" s reference_event s "," s data_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :hold_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $setuphold_timing_check ::=
+      #   $setuphold ( reference_event , data_event , timing_check_limit , timing_check_limit
+      #     [ , [ notifier ] [ , [ stamptime_condition ] [ , [ checktime_condition ]
+      #     [ , [ delayed_reference ] [ , [ delayed_data ] ] ] ] ] ] ) ;
+      rule setuphold_timing_check
+        "$setuphold" s "(" s reference_event s "," s data_event s "," s timing_check_limit s "," s timing_check_limit s
+        (s "," s notifier? (s "," s stamptime_condition? (s "," s checktime_condition?
+        (s "," s delayed_reference? (s "," s delayed_data? )? )? )? )? )? s ")" s ";" {
+          def to_ast
+            n :setuphold_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $recovery_timing_check ::=
+      #   $recovery ( reference_event , data_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule recovery_timing_check
+        "$recovery" s "(" s reference_event s "," s data_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :recovery_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $removal_timing_check ::=
+      #   $removal ( reference_event , data_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule removal_timing_check
+        "$removal" s "(" s reference_event s "," s data_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :removal_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $recrem_timing_check ::=
+      #   $recrem ( reference_event , data_event , timing_check_limit , timing_check_limit
+      #     [ , [ notifier ] [ , [ stamptime_condition ] [ , [ checktime_condition ]
+      #     [ , [ delayed_reference ] [ , [ delayed_data ] ] ] ] ] ] ) ;
+      rule recrem_timing_check
+        "$recrem" s "(" s reference_event s "," s data_event s "," s timing_check_limit s "," s timing_check_limit s
+        (s "," s notifier? (s "," s stamptime_condition? (s "," s checktime_condition?
+        (s "," s delayed_reference? (s "," s delayed_data? )? )? )? )? )? s ")" s ";" {
+          def to_ast
+            n :recrem_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $skew_timing_check ::=
+      #   $skew ( reference_event , data_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule skew_timing_check
+        "$skew" s "(" s reference_event s "," s data_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :skew_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $timeskew_timing_check ::=
+      #   $timeskew ( reference_event , data_event , timing_check_limit
+      #     [ , [ notifier ] [ , [ event_based_flag ] [ , [ remain_active_flag ] ] ] ] ) ;
+      rule timeskew_timing_check
+        "$timeskew" s "(" s reference_event s "," s data_event s "," s timing_check_limit s
+        (s "," s notifier? (s "," s event_based_flag? (s "," s remain_active_flag?)? )? )? s ")" s ";" {
+          def to_ast
+            n :timeskew_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $fullskew_timing_check ::=
+      #   $fullskew ( reference_event , data_event , timing_check_limit , timing_check_limit
+      #     [ , [ notifier ] [ , [ event_based_flag ] [ , [ remain_active_flag ] ] ] ] ) ;
+      rule fullskew_timing_check
+        "$fullskew" s "(" s reference_event s "," s data_event s "," s timing_check_limit s "," s timing_check_limit s
+        (s "," s notifier? (s "," s event_based_flag? (s "," s remain_active_flag? )? )? )? s ")" s ";" {
+          def to_ast
+            n :fullskew_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $period_timing_check ::=
+      #   $period ( controlled_reference_event , timing_check_limit [ , [ notifier ] ] ) ;
+      rule period_timing_check
+        "$period" s "(" s controlled_reference_event s "," s timing_check_limit (s "," s notifier?)? s ")" s ";" {
+          def to_ast
+            n :period_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $width_timing_check ::=
+      #   $width ( controlled_reference_event , timing_check_limit
+      #     [ , threshold [ , notifier ] ] ) ;
+      rule width_timing_check
+        "$width" s "(" s controlled_reference_event s "," s timing_check_limit s
+        (s "," s threshold (s "," s notifier?)? )? s ")" s ";" {
+          def to_ast
+            n :width_timing_check, *elements_to_ast
+          end
+        }
+      end
+      # $nochange_timing_check ::=
+      #   $nochange ( reference_event , data_event , start_edge_offset ,
+      #   end_edge_offset [ , [ notifier ] ] ) ;
+      rule nochange_timing_check
+        "$nochange" s "(" s reference_event s "," s data_event s "," s start_edge_offset s "," s
+        end_edge_offset (s "," s  notifier?)? s ")" s ";" {
+          def to_ast
+            n :nochange_timing_check, *elements_to_ast
+          end
+        }
+      end
+
+      # A.7.5.2 System timing check command arguments
+
+      # checktime_condition ::= mintypmax_expression
+      rule checktime_condition
+        mintypmax_expression
+      end
+      # controlled_reference_event ::= controlled_timing_check_event
+      rule controlled_reference_event
+        controlled_timing_check_event
+      end
+      # data_event ::= timing_check_event
+      rule data_event
+        timing_check_event
+      end
+      # delayed_data ::=
+      #   terminal_identifier
+      #   | terminal_identifier [ constant_mintypmax_expression ]
+      rule delayed_data
+        ((terminal_identifier s "[" s constant_mintypmax_expression s "]") /
+          terminal_identifier) {
+          def to_ast
+            n :delayed_data, *elements_to_ast
+          end
+        }
+      end
+      # delayed_reference ::=
+      #   terminal_identifier
+      #   | terminal_identifier [ constant_mintypmax_expression ]
+      rule delayed_reference
+        ((terminal_identifier s "[" s constant_mintypmax_expression s "]") /
+         terminal_identifier) {
+          def to_ast
+            n :delayed_reference, *elements_to_ast
+          end
+        }
+      end
+      # end_edge_offset ::= mintypmax_expression
+      rule end_edge_offset
+        mintypmax_expression
+      end
+      # event_based_flag ::= constant_expression
+      rule event_based_flag
+        constant_expression
+      end
+      # notifier ::= variable_identifier
+      rule notifier
+        variable_identifier
+      end
+      # reference_event ::= timing_check_event
+      rule reference_event
+        timing_check_event
+      end
+      # remain_active_flag ::= constant_expression
+      rule remain_active_flag
+        constant_expression
+      end
+      # stamptime_condition ::= mintypmax_expression
+      rule stamptime_condition
+        mintypmax_expression
+      end
+      # start_edge_offset ::= mintypmax_expression
+      rule start_edge_offset
+        mintypmax_expression
+      end
+      # threshold ::= constant_expression
+      rule threshold
+        constant_expression
+      end
+      # timing_check_limit ::= expression
+      rule timing_check_limit
+        expression
+      end
+
+      # A.7.5.3 System timing check event definitions
+
+      # timing_check_event ::=
+      #   [timing_check_event_control] specify_terminal_descriptor [ &&& timing_check_condition ]
+      rule timing_check_event
+        timing_check_event_control? s specify_terminal_descriptor (S "&&&" S timing_check_condition)? {
+          def to_ast
+            n :timing_check_event, *elements_to_ast
+          end
+        }
+      end
+      # controlled_timing_check_event ::=
+      #   timing_check_event_control specify_terminal_descriptor [ &&& timing_check_condition ]
+      rule controlled_timing_check_event
+        timing_check_event_control S specify_terminal_descriptor (S "&&&" S timing_check_condition)? {
+          def to_ast
+            n :controlled_timing_check_event, *elements_to_ast
+          end
+        }
+      end
+      # timing_check_event_control ::=
+      #   posedge
+      #   | negedge
+      #   | edge_control_specifier
+      rule timing_check_event_control
+        "posedge" / "negedge" / edge_control_specifier {
+          def to_ast
+            n :timing_check_event_control, text_value
+          end
+        }
+      end
+      # specify_terminal_descriptor ::=
+      #   specify_input_terminal_descriptor
+      #   | specify_output_terminal_descriptor
+      rule specify_terminal_descriptor
+        specify_input_terminal_descriptor / specify_output_terminal_descriptor
+      end
+      # edge_control_specifier ::= edge [ edge_descriptor { , edge_descriptor } ]
+      rule edge_control_specifier
+        "edge" (S edge_descriptor (s "," s edge_descriptor)*)? {
+          def to_ast
+            n :edge_control_specifier, *elements_to_ast
+          end
+        }
+      end
+      # edge_descriptor2 ::=
+      #   01
+      #   | 10
+      #   | z_or_x zero_or_one
+      #   | zero_or_one z_or_x
+      rule edge_descriptor2
+        "01" / "10" / z_or_x s zero_or_one / zero_or_one s z_or_x {
+          def to_ast
+            n :edge_descriptor2, text_value
+          end
+        }
+      end
+      # zero_or_one ::= 0 | 1
+      rule zero_or_one
+        "0" / "1"
+      end
+      # z_or_x ::= x | X | z | Z
+      rule z_or_x
+        "x" / "X" / "z" / "Z"
+      end
+      # timing_check_condition ::=
+      #   scalar_timing_check_condition
+      #   | ( scalar_timing_check_condition )
+      rule timing_check_condition
+        (scalar_timing_check_condition / "(" s scalar_timing_check_condition s ")") {
+          def to_ast
+            n :timing_check_condition, *elements_to_ast
+          end
+        }
+      end
+      # scalar_timing_check_condition ::=
+      #   expression
+      #   | ~ expression
+      #   | expression == scalar_constant
+      #   | expression === scalar_constant
+      #   | expression != scalar_constant
+      #   | expression !== scalar_constant
+      rule scalar_timing_check_condition
+        ((expression s "==" s scalar_constant) /
+         (expression s "===" s scalar_constant) /
+         (expression s "!=" s scalar_constant) /
+         (expression s "!==" s scalar_constant) /
+         expression /
+         ("~" s expression)) {
+          def to_ast
+            n :scalar_timing_check_condition, *elements_to_ast
+          end
+         }
+      end
+      # scalar_constant ::=
+      #   1'b0 | 1'b1 | 1'B0 | 1'B1 | 'b0 | 'b1 | 'B0 | 'B1 | 1 | 0
+      rule scalar_constant
+        ("1'b0" / "1'b1" / "1'B0" / "1'B1" / "'b0" / "'b1" / "'B0" / "'B1" / "1" / "0") {
+          def to_ast
+            n :scalar_constant, text_value[-1]
+          end
+        }
+      end
+
+      # A.8 Expressions
+
+      # A.8.1 Concatenations
+
+      # concatenation ::= { expression { , expression } }
+      rule concatenation
+        "{" s expression (s "," s expression)* s "}" {
+          def to_ast
+            n :concatenation, *elements_to_ast
+          end
+        }
+      end
+      # constant_concatenation ::= { constant_expression { , constant_expression } }
+      rule constant_concatenation
+        "{" s constant_expression (s "," s constant_expression)* s "}" {
+          def to_ast
+            n :constant_concatenation, *elements_to_ast
+          end
+        }
+      end
+      # constant_multiple_concatenation ::= { constant_expression constant_concatenation }
+      rule constant_multiple_concatenation
+        "{" s constant_expression s constant_concatenation s "}" {
+          def to_ast
+            n :constant_multiple_concatenation, *elements_to_ast
+          end
+        }
+      end
+      # module_path_concatenation ::= { module_path_expression { , module_path_expression } }
+      rule module_path_concatenation
+        "{" s module_path_expression (s "," s module_path_expression)* s "}" {
+          def to_ast
+            n :module_path_concatenation, *elements_to_ast
+          end
+        }
+      end
+      # module_path_multiple_concatenation ::= { constant_expression module_path_concatenation }
+      rule module_path_multiple_concatenation
+        "{" s constant_expression s module_path_concatenation s "}" {
+          def to_ast
+            n :module_path_multiple_concatenation, *elements_to_ast
+          end
+        }
+      end
+      # multiple_concatenation ::= { constant_expression concatenation }
+      rule multiple_concatenation
+        "{" s constant_expression s concatenation s "}" {
+          def to_ast
+            n :multiple_concatenation, *elements_to_ast
+          end
+        }
+      end
+
+      # A.8.2 Function calls
+
+      # constant_function_call ::= function_identifier { attribute_instance }
+      #   ( constant_expression { , constant_expression } )
+      rule constant_function_call
+        function_identifier (s attribute_instance)* s "(" s constant_expression (s "," s constant_expression)* s ")" {
+          def to_ast
+            n :function_identifier, *elements_to_ast
+          end
+        } 
+      end
+      # constant_system_function_call ::= system_function_identifier
+      #   ( constant_expression { , constant_expression } )
+      rule constant_system_function_call
+        system_function_identifier s "(" s constant_expression (s "," s constant_expression)* s ")" {
+          def to_ast
+            n :constant_system_function_call, *elements_to_ast
+          end
+        }
+      end
+      # function_call ::= hierarchical_function_identifier{ attribute_instance }
+      #   ( expression { , expression } )
+      rule function_call
+        hierarchical_function_identifier (s attribute_instance)* s "(" s expression (s "," s expression)* s ")" {
+          def to_ast
+            n :function_call, *elements_to_ast
+          end
+        }
+      end
+      # system_function_call ::= system_function_identifier
+      #   [ ( expression { , expression } ) ]
+      rule system_function_call
+        system_function_identifier (s "(" s expression (s "," s expression)* s ")")? {
+          def to_ast
+            n :system_function_call, *elements_to_ast
+          end
+        }
+      end
+
+      # A.8.3 Expressions
+
+      # base_expression ::= expression
+      rule base_expression
+        expression
+      end
+      # conditional_expression ::= expression1 ? { attribute_instance } expression2 : expression3
+      # This has been implemented in-lined with the expression rule to help manage left recursion
+      #rule conditional_expression
+      #  expression1 S "?" (s attribute_instance)* s expression2 s ":" s expression3 {
+      #    def to_ast
+      #      n :conditional_expression, *elements_to_ast
+      #    end
+      #  }
+      #end
+      # constant_base_expression ::= constant_expression
+      rule constant_base_expression
+        constant_expression
+      end
+      # constant_expression ::=
+      #   constant_primary
+      #   | unary_operator { attribute_instance } constant_primary
+      #   | constant_expression binary_operator { attribute_instance } constant_expression
+      #   | constant_expression ? { attribute_instance } constant_expression : constant_expression
+      #
+      # See - https://stackoverflow.com/questions/4994036/left-recursion-elimination
+      rule constant_expression
+        ((unary_operator (s attribute_instance)* s constant_primary constant_expression_tail?) /
+        (constant_primary constant_expression_tail?)) {
+          def to_ast
+            n :constant_expression, *elements_to_ast
+          end
+        }
+      end
+      rule constant_expression_tail
+        ((s "?" (s attribute_instance)* s constant_expression s ":" s constant_expression constant_expression_tail?) /
+         (s binary_operator (s attribute_instance)* s constant_expression constant_expression_tail?))
+      end
+      # constant_mintypmax_expression ::=
+      #   constant_expression
+      #   | constant_expression : constant_expression : constant_expression
+      rule constant_mintypmax_expression
+        (constant_expression s ":" s constant_expression s ":" s constant_expression) /
+        constant_expression
+      end
+      # constant_range_expression ::=
+      #   constant_expression
+      #   | msb_constant_expression : lsb_constant_expression
+      #   | constant_base_expression +: width_constant_expression
+      #   | constant_base_expression -: width_constant_expression
+      rule constant_range_expression
+        ((msb_constant_expression s ":" s lsb_constant_expression) /
+         (constant_base_expression s "+:" s width_constant_expression) /
+         (constant_base_expression s "-:" s width_constant_expression) /
+         constant_expression) {
+          def to_ast
+            n :constant_range_expression, *elements_to_ast
+          end
+        }
+      end
+      # dimension_constant_expression ::= constant_expression
+      rule dimension_constant_expression
+        constant_expression
+      end
+      # expression ::=
+      #   primary
+      #   | unary_operator { attribute_instance } primary
+      #   | expression binary_operator { attribute_instance } expression
+      #   | conditional_expression
+      rule expression
+        ((main:(unary_operator (s attribute_instance)* s) tail:primary expression_tail?) /
+         (main:primary tail:expression_tail?)) {
+          # Some logic needed here to make things pretty after dealing with the left recursion workaround
+          def to_ast
+            if !respond_to?(:tail) || tail.empty?
+              n :expression, *elements_to_ast
+            else
+              if tail.respond_to?(:expr2)
+                n :conditional_expression, n(:expression1, n(:expression, main.to_ast)), tail.expr2.to_ast, tail.expr3.to_ast
+              else
+                n :expression, *elements_to_ast
+              end
+            end
+          end
+        }
+      end
+      rule expression_tail
+        (s binary_operator (s attribute_instance)* s expression expression_tail?) /
+        (s "?" (s attribute_instance)* s expr2:expression2 s ":" s expr3:expression3 expression_tail?)
+      end
+      # expression1 ::= expression
+      rule expression1
+        expression 1..1 {
+          def to_ast
+            n :expression1, *elements_to_ast
+          end
+        }
+      end
+      # expression2 ::= expression
+      rule expression2
+        expression 1..1 {
+          def to_ast
+            n :expression2, *elements_to_ast
+          end
+        }
+      end
+      # expression3 ::= expression
+      rule expression3
+        expression 1..1 {
+          def to_ast
+            n :expression3, *elements_to_ast
+          end
+        }
+      end
+      # lsb_constant_expression ::= constant_expression
+      rule lsb_constant_expression
+        constant_expression
+      end
+      # mintypmax_expression ::=
+      #   expression
+      #   | expression : expression : expression
+      rule mintypmax_expression
+        (expression /
+        (expression s ":" s expression s ":" s expression)) {
+          def to_ast
+            n :mintypmax_expression, *elements_to_ast
+          end
+        }
+      end
+      # module_path_conditional_expression ::= module_path_expression ? { attribute_instance }
+      #   module_path_expression : module_path_expression
+      rule module_path_conditional_expression
+        module_path_expression s "?" (s attribute_instance)* s
+        module_path_expression s ":" s module_path_expression {
+          def to_ast
+            n :module_path_conditional_expression, *elements_to_ast
+          end
+        }
+      end
+      # module_path_expression ::=
+      #   module_path_primary
+      #   | unary_module_path_operator { attribute_instance } module_path_primary
+      #   | module_path_expression binary_module_path_operator { attribute_instance }
+      #     module_path_expression
+      #   | module_path_conditional_expression
+      rule module_path_expression
+        (module_path_primary /
+        (unary_module_path_operator (s attribute_instance)* s module_path_primary) /
+        (module_path_expression s binary_module_path_operator (s attribute_instance)* s module_path_expression) /
+        (module_path_conditional_expression)) {
+          def to_ast
+            n :module_path_expression, *elements_to_ast
+          end
+        }
+      end
+      # module_path_mintypmax_expression ::=
+      #   module_path_expression
+      #   | module_path_expression : module_path_expression : module_path_expression
+      rule module_path_mintypmax_expression
+        (module_path_expression /
+        (module_path_expression s ":" s module_path_expression s ":" s module_path_expression)) {
+          def to_ast
+            n :module_path_mintypmax_expression, *elements_to_ast
+          end
+        }
+      end
+      # msb_constant_expression ::= constant_expression
+      rule msb_constant_expression
+        constant_expression
+      end
+      # range_expression ::=
+      #   expression
+      #   | msb_constant_expression : lsb_constant_expression
+      #   | base_expression +: width_constant_expression
+      #   | base_expression -: width_constant_expression
+      rule range_expression
+        ((msb_constant_expression s ":" s lsb_constant_expression) /
+         (base_expression s "+:" s width_constant_expression) /
+         (base_expression s "-:" s width_constant_expression) /
+         (expression)) {
+          def to_ast
+            n :range_expression, *elements_to_ast
+          end
+        }
+      end
+      # width_constant_expression ::= constant_expression
+      rule width_constant_expression
+        constant_expression
+      end
+
+      # A.8.4 Primaries
+
+      # constant_primary ::=
+      #   number
+      #   | parameter_identifier [ [ constant_range_expression ] ]
+      #   | specparam_identifier [ [ constant_range_expression ] ]
+      #   | constant_concatenation
+      #   | constant_multiple_concatenation
+      #   | constant_function_call
+      #   | constant_system_function_call
+      #   | ( constant_mintypmax_expression )
+      #   | string
+      rule constant_primary
+       ((parameter_identifier (s "[" s constant_range_expression s "]")?) /
+        (specparam_identifier (s "[" s constant_range_expression s "]")?) /
+        constant_concatenation /
+        constant_multiple_concatenation /
+        constant_function_call /
+        constant_system_function_call /
+        ("(" s constant_mintypmax_expression s ")") /
+        number /
+        string) {
+          def to_ast
+            n :constant_primary, *elements_to_ast
+          end
+        }
+      end
+      # module_path_primary ::=
+      #   number
+      #   | identifier
+      #   | module_path_concatenation
+      #   | module_path_multiple_concatenation
+      #   | function_call
+      #   | system_function_call
+      #   | ( module_path_mintypmax_expression )
+      rule module_path_primary
+        (module_path_concatenation /
+         module_path_multiple_concatenation /
+         function_call /
+         system_function_call /
+         ("(" s module_path_mintypmax_expression s ")") /
+         number /
+         identifier) {
+           def to_ast
+             n :module_path_primary, *elements_to_ast
+           end
+         }
+      end
+      # primary ::=
+      #   number
+      #   | hierarchical_identifier [ { [ expression ] } [ range_expression ] ]
+      #   | concatenation
+      #   | multiple_concatenation
+      #   | function_call
+      #   | system_function_call
+      #   | ( mintypmax_expression )
+      #   | string
+      rule primary
+       ((hierarchical_identifier (s (s "[" s expression s "]" &(s "["))* "[" s range_expression s "]")?) /
+        concatenation /
+        multiple_concatenation /
+        function_call /
+        system_function_call /
+        ("(" s mintypmax_expression s ")") /
+        number /
+        string) {
+          def to_ast
+            n :primary, *elements_to_ast
+          end
+        }
+      end
+
+      # A.8.5 Expression left-side values
+
+      # net_lvalue ::=
+      #   hierarchical_net_identifier [ { [ constant_expression ] } [ constant_range_expression ] ]
+      #   | { net_lvalue { , net_lvalue } }
+      rule net_lvalue
+        ((hierarchical_net_identifier (s (s "[" s constant_expression s "]" &(s "["))* "[" s constant_range_expression s "]")?) /
+         ("{" s net_lvalue (s "," s net_lvalue)* s "}")) {
+          def to_ast
+            n :net_lvalue, *elements_to_ast
+          end
+        }
+      end
+      # variable_lvalue ::=
+      #   hierarchical_variable_identifier [ { [ expression ] } [ range_expression ] ]
+      #   | { variable_lvalue { , variable_lvalue } }
+      rule variable_lvalue
+        ((hierarchical_variable_identifier (s (s "[" s expression s "]" &(s "["))* "[" s range_expression s "]")?) /
+         ("{" s variable_lvalue (s "," s variable_lvalue)* s "}")) {
+          def to_ast
+            n :variable_lvalue, *elements_to_ast
+          end
+        }
+      end
+
+      # A.8.6 Operators
+
+      # unary_operator ::=
+      #   + | - | ! | ~ | & | ~& | | | ~| | ^ | ~^ | ^~
+      rule unary_operator
+        (
+          "+" / "-" / "!" / "&" / "|" /
+          "~|" / "~&" / "~^" / "~" /
+          "^~" / "^"
+        ) {
+          def to_ast
+            n :unary_operator, text_value
+          end
+        }
+      end
+      # binary_operator ::=
+      #   + | - | * | / | % | == | != | === | !== | && | || | **
+      #   | < | <= | > | >= | & | | | ^ | ^~ | ~^ | >> | << | >>> | <<<
+      rule binary_operator
+        (
+          "+" / "-" / "/" / "%" / "~^" /
+          "**" / "*" /
+          "===" / "==" /
+          "!==" /"!=" / 
+          "||" / "|" /
+          "&&" / "&" /
+          ">=" / ">>>" / ">>" / ">" /
+          "<=" / "<<<" / "<<" /"<" /
+          "^~" / "^"
+        ) {
+          def to_ast
+            n :binary_operator, text_value
+          end
+        }
+      end
+      # unary_module_path_operator ::=
+      #   ! | ~ | & | ~& | | | ~| | ^ | ~^ | ^~
+      rule unary_module_path_operator
+        (
+          "!" / "&" / "|" /
+          "~&" / "~^" / "~|" / "~" /
+          "^~" / "^"
+        ) {
+          def to_ast
+            n :unary_module_path_operator, text_value
+          end
+        }
+      end
+      # binary_module_path_operator ::=
+      #   == | != | && | || | & | | | ^ | ^~ | ~^
+      rule binary_module_path_operator
+        (
+          "==" / "!=" / " ~^" /
+          "||" / "|" /
+          "&&" / "&" /
+          "^~" / "^"
+        ) {
+          def to_ast
+            n :binary_module_path_operator, text_value
+          end
+        }
+      end
+
+      # A.8.7 Numbers
+
+      # number ::=
+      #   decimal_number
+      #   | octal_number
+      #   | binary_number
+      #   | hex_number
+      #   | real_number
+      rule number
+        (octal_number /
+        binary_number /
+        hex_number /
+        real_number /
+        decimal_number) 1..1 {  # 1..1 is used to stop Treetop from merging nodes below this level
+          def to_ast
+            n :number, *elements_to_ast
+          end
+        }
+      end
+      # real_number ::=
+      #   unsigned_number . unsigned_number
+      #   | unsigned_number [ . unsigned_number ] exp [ sign ] unsigned_number
+      rule real_number
+        ((unsigned_number "." unsigned_number) /
+        (unsigned_number ("." unsigned_number)? exp sign? unsigned_number)) {
+          def to_ast
+            n :real_number, *elements_to_ast
+          end
+        }
+      end
+      # exp ::= e | E
+      rule exp
+        ("e" / "E") {
+          def to_ast
+            "exp"
+          end
+        }
+      end
+      # decimal_number ::=
+      #   unsigned_number
+      #   | [ size ] decimal_base unsigned_number
+      #   | [ size ] decimal_base x_digit { _ }
+      #   | [ size ] decimal_base z_digit { _ }
+      rule decimal_number
+        ((size? decimal_base s unsigned_number) /
+         (size? decimal_base s x_digit _*) /
+         (size? decimal_base s z_digit _*) /
+         unsigned_number) 1..1 {
+          def to_ast
+            n :decimal_number, *elements_to_ast
+          end
+        }
+      end
+      # binary_number ::= [ size ] binary_base binary_value
+      rule binary_number
+        size? binary_base s binary_value {
+          def to_ast
+            n :binary_number, *elements_to_ast
+          end
+        }
+      end
+      # octal_number ::= [ size ] octal_base octal_value
+      rule octal_number
+        size? octal_base s octal_value {
+          def to_ast
+            n :octal_number, *elements_to_ast
+          end
+        }
+      end
+      # hex_number ::= [ size ] hex_base hex_value
+      rule hex_number
+        size? hex_base s hex_value {
+          def to_ast
+            n :hex_number, *elements_to_ast
+          end
+        }
+      end
+      # sign ::= + | -
+      rule sign
+        ("+" / "-") {
+          def to_ast
+            n :sign, text_value
+          end
+        }
+      end
+      # size ::= non_zero_unsigned_number
+      rule size
+        non_zero_unsigned_number {
+          def to_ast
+            n :size, elements_to_ast.join.to_i
+          end
+        }
+      end
+      # non_zero_unsigned_number ::= non_zero_decimal_digit { _ | decimal_digit}
+      rule non_zero_unsigned_number
+        non_zero_decimal_digit ("_" / decimal_digit)* {
+          def to_ast
+            elements_to_ast.join.to_i
+          end
+        }
+      end
+      # unsigned_number ::= decimal_digit { _ | decimal_digit }
+      rule unsigned_number
+        decimal_digit ("_" / decimal_digit)* {
+          def to_ast
+            elements_to_ast.join.to_i
+          end
+        }
+      end
+      # binary_value ::= binary_digit { _ | binary_digit }
+      rule binary_value
+        binary_digit ("_" / binary_digit)* {
+          def to_ast
+            elements_to_ast.join
+          end
+        }
+      end
+      # octal_value ::= octal_digit { _ | octal_digit }
+      rule octal_value
+        octal_digit ("_" / octal_digit)* {
+          def to_ast
+            elements_to_ast.join
+          end
+        }
+      end
+      # hex_value ::= hex_digit { _ | hex_digit }
+      rule hex_value
+        hex_digit ("_" / hex_digit)* {
+          def to_ast
+            elements_to_ast.join
+          end
+        }
+      end
+      # decimal_base ::= '[s|S]d | '[s|S]D
+      rule decimal_base
+        ("'" ("s" / "S")? "d") / ("'" ("s" / "S")? "D")
+      end
+      # binary_base ::= '[s|S]b | '[s|S]B
+      rule binary_base
+        ("'" ("s" / "S")? "b") / ("'" ("s" / "S")? "B")
+      end
+      # octal_base ::= '[s|S]o | '[s|S]O
+      rule octal_base
+        ("'" ("s" / "S")? "o") / ("'" ("s" / "S")? "O")
+      end
+      # hex_base ::= '[s|S]h | '[s|S]H
+      rule hex_base
+        ("'" ("s" / "S")? "h") / ("'" ("s" / "S")? "H")
+      end
+      # non_zero_decimal_digit ::= 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+      rule non_zero_decimal_digit
+        [1-9] {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # decimal_digit ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+      rule decimal_digit
+        [0-9] {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # binary_digit ::= x_digit | z_digit | 0 | 1
+      rule binary_digit
+        (x_digit / z_digit / "0" / "1") {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # octal_digit ::= x_digit | z_digit | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+      rule octal_digit
+        (x_digit / z_digit / [0-7]) {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # hex_digit ::=
+      #   x_digit | z_digit | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+      #   | a | b | c | d | e | f | A | B | C | D | E | F
+      rule hex_digit
+        (x_digit / z_digit / [0-9a-fA-F]) {
+          def to_ast
+            text_value.upcase
+          end
+        }
+      end
+      # x_digit ::= x | X
+      rule x_digit
+        ("x" / "X") {
+          def to_ast
+            "X"
+          end
+        }
+      end
+      # z_digit ::= z | Z | ?
+      rule z_digit
+        ("z" / "Z" / "?") {
+          def to_ast
+            "Z"
+          end
+        }
+      end
+
+      # A.8.8 Strings
+
+      # string ::= " { Any_ASCII_Characters_except_new_line } "
+      rule string
+        '"' val:(!'"' !N  .)* '"' {
+          def to_ast
+            val.text_value
+          end
+        }
+      end
+
+      # A.9 General
+      # 
+      # A.9.1 Attributes
+      # 
+      # attribute_instance ::= (* attr_spec { , attr_spec } *)
+      rule attribute_instance
+        "(*" s attr_spec (s ',' s attr_spec)* s "*)" {
+          def to_ast
+            n :attribute_instance, *elements_to_ast
+          end
+        }
+      end
+      # attr_spec ::=
+      #   attr_name [ = constant_expression ]
+      rule attr_spec
+        attr_name (s "=" s constant_expression)? {
+          def to_ast
+            n :attr_spec, *elements_to_ast
+          end
+        }
+      end
+      # attr_name ::= identifier
+      rule attr_name
+        identifier
+      end
+
+      # A.9.2 Comments
+      # 
+      # comment ::=
+      #   one_line_comment
+      #   | block_comment
+      rule comment
+        one_line_comment / block_comment
+      end
+
+      # one_line_comment ::= // comment_text \n
+      # block_comment ::= /* comment_text */
+      # comment_text ::= { Any_ASCII_character }
+
+      rule block_comment
+        "/*" (!end_of_comment .)* end_of_comment {
+          #def to_ast
+          #  n :comment, text_value
+          #end
+        }
+      end
+
+      rule end_of_comment
+        "*/"
+      end
+
+      rule one_line_comment
+        "//" (!N .)* {
+          #def to_ast
+          #  n :comment, text_value
+          #end
+        }
+      end
+
+      # A.9.3 Identifiers
+      # 
+      # block_identifier ::= identifier
+      rule block_identifier
+        identifier
+      end
+      # cell_identifier ::= identifier
+      rule cell_identifier
+        identifier
+      end
+      # config_identifier ::= identifier
+      rule config_identifier
+        identifier
+      end
+      # escaped_identifier ::= \ {Any_ASCII_character_except_white_space} white_space
+      rule escaped_identifier
+        "\\" !S S
+      end
+      # event_identifier ::= identifier
+      rule event_identifier
+        identifier
+      end
+      # function_identifier ::= identifier
+      rule function_identifier
+        identifier
+      end
+      # gate_instance_identifier ::= identifier
+      rule gate_instance_identifier
+        identifier
+      end
+      # generate_block_identifier ::= identifier
+      rule generate_block_identifier
+        identifier
+      end
+      # genvar_identifier ::= identifier
+      rule genvar_identifier
+        identifier
+      end
+      # hierarchical_block_identifier ::= hierarchical_identifier
+      rule hierarchical_block_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_event_identifier ::= hierarchical_identifier
+      rule hierarchical_event_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_function_identifier ::= hierarchical_identifier
+      rule hierarchical_function_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_identifier ::= { identifier [ [ constant_expression ] ] . } identifier
+      rule hierarchical_identifier
+        (identifier ("[" s constant_expression s "]")? "." )* identifier
+      end
+      # hierarchical_net_identifier ::= hierarchical_identifier
+      rule hierarchical_net_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_parameter_identifier ::= hierarchical_identifier
+      rule hierarchical_parameter_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_variable_identifier ::= hierarchical_identifier
+      rule hierarchical_variable_identifier
+        hierarchical_identifier
+      end
+      # hierarchical_task_identifier ::= hierarchical_identifier
+      rule hierarchical_task_identifier
+        hierarchical_identifier
+      end
+      # identifier ::=
+      #   simple_identifier
+      #   | escaped_identifier
+      rule identifier
+        simple_identifier / escaped_identifier
+      end
+
+      # inout_port_identifier ::= identifier
+      rule inout_port_identifier
+        identifier
+      end
+      # input_port_identifier ::= identifier
+      rule input_port_identifier
+        identifier
+      end
+      # instance_identifier ::= identifier
+      rule instance_identifier
+        identifier
+      end
+      # library_identifier ::= identifier
+      rule library_identifier
+        identifier
+      end
+      # module_identifier ::= identifier
+      rule module_identifier
+        identifier
+      end
+      # module_instance_identifier ::= identifier
+      rule module_instance_identifier
+        identifier
+      end
+      # net_identifier ::= identifier
+      rule net_identifier
+        identifier
+      end
+      # output_port_identifier ::= identifier
+      rule output_port_identifier
+        identifier
+      end
+      # parameter_identifier ::= identifier
+      rule parameter_identifier
+        identifier {
+          def to_ast
+            n :parameter_identifier, text_value
+          end
+        }
+      end
+      # port_identifier ::= identifier
+      rule port_identifier
+        identifier
+      end
+      # real_identifier ::= identifier
+      rule real_identifier
+        identifier
+      end
+      # simple_identifier ::= [ a-zA-Z_ ] { [ a-zA-Z0-9_$ ] }
+      rule simple_identifier
+        !(("input" / "output" / "inout") ![a-zA-Z0-9_]) [a-zA-Z_] ([a-zA-Z0-9_])* {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # specparam_identifier ::= identifier
+      rule specparam_identifier
+        identifier
+      end
+      # system_function_identifier ::= $[ a-zA-Z0-9_$ ]{ [ a-zA-Z0-9_$ ] }
+      rule system_function_identifier
+        "$" [a-zA-Z0-9_$]+ {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # system_task_identifier ::= $[ a-zA-Z0-9_$ ]{ [ a-zA-Z0-9_$ ] }
+      rule system_task_identifier
+        "$" [a-zA-Z0-9_$]+ {
+          def to_ast
+            text_value
+          end
+        }
+      end
+      # task_identifier ::= identifier
+      rule task_identifier
+        identifier
+      end
+      # terminal_identifier ::= identifier
+      rule terminal_identifier
+        identifier
+      end
+      # text_macro_identifier ::= identifier
+      rule text_macro_identifier
+        identifier
+      end
+      # topmodule_identifier ::= identifier
+      rule topmodule_identifier
+        identifier
+      end
+      # udp_identifier ::= identifier
+      rule udp_identifier
+        identifier
+      end
+      # udp_instance_identifier ::= identifier
+      rule udp_instance_identifier
+        identifier
+      end
+      # variable_identifier ::= identifier
+      rule variable_identifier
+        identifier
+      end
+
+      # A.9.4 White space
+      # 
+      # white_space ::= space | tab | newline | eof
+
+      rule space
+        " " / "\t"
+      end
+
+      # Optional space, including new lines and comments
+      rule s
+        (space / N / one_line_comment / block_comment)*
+      end
+
+      # Required space, including new lines and comments
+      rule S
+        (space / N / one_line_comment / block_comment)+ {
+          #def to_ast
+          #  elements_to_ast
+          #end
+        }
+      end
+
+      # Optional end of line
+      rule n
+        "\r"? "\n"?
+      end
+
+      # Required end of line
+      rule N
+        "\r"? "\n"
+      end
+    end
+  end
+end

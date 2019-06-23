@@ -4,3 +4,5 @@
 /HostBuild
 /TargetOutputs
 /VivadoWorkspace
+/lib/generated
+/documentation
