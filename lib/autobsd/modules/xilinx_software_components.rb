@@ -93,7 +93,6 @@ EOF
     File.binwrite "#{build_dir}/#{project_name}.dtb", compiled_tree
 
     @builder.exports["#{project_name}-FSBL"] = File.join(build_dir, "fsbl_dir", "executable.elf")
-    @builder.exports["#{project_name}-BIT"] = Dir.glob(File.join(build_dir, "*.bit")).first
     @builder.exports["#{project_name}-DTB"] = "#{build_dir}/#{project_name}.dtb"
   end
 

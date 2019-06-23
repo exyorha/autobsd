@@ -74,7 +74,7 @@ EOF
 				xml_file = File.join(@documentation_root, xml_filename)
 				h_filename = "#{processor.interface_name}.h"
 				h_file = File.join(@documentation_root, h_filename)
-			  File.open(xml_filename, "w") do |outf|
+			  File.open(xml_file, "w") do |outf|
 			    xml.write outf
 			  end
 
@@ -113,6 +113,7 @@ EOF
 			@project,
 			chdir: File.dirname(@project)
 
-		@builder.exports[@project_name] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_wrapper.sysdef"
+		@builder.exports[@project_name] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_top.hwdef"
+		@builder.exports[@project_name + ".bit"] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_top.bit"
 	end
 end
