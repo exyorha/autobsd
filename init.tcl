@@ -4,7 +4,7 @@ rst -sys
 source VivadoWorkspace/DSO100Hardware-SDK/ps7_init.tcl
 ps7_init
 targets -filter { name =~ "xc7z*" } -set
-fpga VivadoWorkspace/DSO100Hardware/DSO100Hardware.runs/impl_1/dso100_top.bit
+fpga VivadoWorkspace/DSO100Hardware/DSO100Hardware.runs/impl_1/dso100_wrapper.bit
 targets -filter { name =~ "ARM*#0" } -set
 ps7_post_config
 ps7_debug

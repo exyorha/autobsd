@@ -113,7 +113,7 @@ EOF
 			@project,
 			chdir: File.dirname(@project)
 
-		@builder.exports[@project_name] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_top.hwdef"
-		@builder.exports[@project_name + ".bit"] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_top.bit"
+		@builder.exports[@project_name] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_wrapper.hwdef"
+		@builder.exports[@project_name + ".bit"] = "#{File.dirname(@project)}/#{@project_name}.runs/impl_1/#{root_bd}_wrapper.bit"
 	end
 end
