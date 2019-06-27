@@ -18,7 +18,13 @@ class Autobsd::Modules::BSDFilesystem
     path = "/root/FSBuild/#{name}"
 
     manifest = File.read @builder.path_to_file @config.fetch('manifest')
-    manifest.gsub!(/%(.+?)%/) { @builder.exports.fetch $1 }
+    index = 1
+    manifest.gsub!(/%(.+?)%/) do
+        src_filename = @builder.exports.fetch $1
+        dest_filename = "#{path}/f#{index}"
+        @builder.sftp_session.upload! src_filename, dest_filename
+        dest_filename
+    end
 
     stream = StringIO.new manifest
 

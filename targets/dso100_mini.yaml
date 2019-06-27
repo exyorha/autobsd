@@ -1,0 +1,11 @@
+freebsd_builduser: root
+cmake_system_processor: arm
+cmake_target: armv7-gnueabihf-freebsd12.0
+modules:
+  - name: TargetCMakeProject
+    project: DSOSystem
+    configuration: Release
+    retrieve_exports:
+        DSO: DSO/DSO
+        DSO.dbg: DSO/DSO.dbg
+    has_host_tools: true
