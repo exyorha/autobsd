@@ -11,9 +11,9 @@ class Autobsd::Modules::FreeBSDSystem
   end
 
   def build!
-    #establish_svn
-    #sync_sources
-    #build_world
+    establish_svn
+    sync_sources
+    build_world
     build_modules
 
     @builder.execute_checked "ln", "-sf", "#{OBJ_PATH}#{SRC_PATH}/tmp/usr/bin/as", "/usr/bin/#{@builder.config.fetch("cmake_target")}-as"

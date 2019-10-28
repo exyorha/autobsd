@@ -13,8 +13,8 @@ modules:
     root_bd: dso100
 
   - name: FreeBSDSystem
-    branch: svn://svn.freebsd.org/base/releng/12.0
-    revision: 349200
+    branch: svn://svn.freebsd.org/base/releng/12.1
+    revision: 354091
     target: arm
     target_arch: armv7
     kernel_config: DSO100
