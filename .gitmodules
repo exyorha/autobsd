@@ -1,21 +1,21 @@
 [submodule "projects/BSDBootImageBuilder"]
 	path = projects/BSDBootImageBuilder
-	url = https://unwind-project.org/dso100/BSDBootImageBuilder.git
+	url = https://github.com/moon-touched/BSDBootImageBuilder.git
 [submodule "projects/BSDKickstart"]
 	path = projects/BSDKickstart
-	url = https://unwind-project.org/dso100/BSDKickstart.git
+	url = https://github.com/moon-touched/BSDKickstart.git
 [submodule "projects/DSO100Hardware"]
 	path = projects/DSO100Hardware
-	url = https://unwind-project.org/dso100/DSO100Hardware.git
+	url = https://github.com/moon-touched/DSO100Hardware.git
 [submodule "projects/device-tree-xlnx"]
 	path = projects/device-tree-xlnx
 	url = https://github.com/xilinx/device-tree-xlnx.git
 [submodule "projects/FreeBSDKernelOverlay"]
 	path = projects/FreeBSDKernelOverlay
-	url = https://unwind-project.org/dso100/FreeBSDKernelOverlay.git
+	url = https://github.com/moon-touched/FreeBSDKernelOverlay.git
 [submodule "projects/DSOSystem"]
 	path = projects/DSOSystem
-	url = https://unwind-project.org/dso100/DSOSystem.git
+	url = https://github.com/moon-touched/DSOSystem.git
 [submodule "projects/DSO100Drivers"]
 	path = projects/DSO100Drivers
-	url = https://unwind-project.org/dso100/DSO100Drivers.git
+	url = https://github.com/moon-touched/DSO100Drivers.git
