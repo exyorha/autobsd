@@ -51,6 +51,12 @@ installing CMake on it.
 Vivado side of things may be more problematic, unless Vivado version is
 matched exactly.
 
+autobsd is written in Ruby, and, as such, requires Ruby interpreter on the host
+machine. CMake and a suitable C compiler are also required.
+
+Also note that DSO-100 uses submodules heavily - make sure you have retrieved
+them, recursively, before attempting to build.
+
 # Licensing
 
 autobsd, and, indeed, the entire DSO-100 project, as published, is licensed
